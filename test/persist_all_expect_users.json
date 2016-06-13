@@ -1,0 +1,57 @@
+[
+  {
+    "id": 1,
+    "username": "Edi",
+    "active": true,
+    "salary": 123.32,
+    "comments": "Test comment",
+    "last_time": "2016-03-01 03:10:00",
+    "photo": "ABC"
+  },
+  {
+    "id": 2,
+    "username": "Rudi",
+    "active": true,
+    "salary": 234,
+    "comments": "def",
+    "last_time": "2016-03-01 05:10:00",
+    "photo": "bcd"
+  },
+  {
+    "id": 3,
+    "username": "Gadi",
+    "active": true,
+    "salary": 123.4,
+    "comments": "Abcdef",
+    "city_lived": [
+      "Los Angeles",
+      "London"
+    ],
+    "country_lived": [
+      "USA",
+      "UK"
+    ],
+    "city_visited": {
+      "Warsaw": 1
+    }
+  },
+  {
+    "id": 4,
+    "username": "Hogi",
+    "active": true,
+    "salary": 143,
+    "comments": "xyz",
+    "last_time": "2016-03-01 08:43:00",
+    "photo": "cde",
+    "city_lived": [
+      "Los Angeles",
+      "Paris",
+      "London"
+    ],
+    "country_lived": [
+      "USA",
+      "France",
+      "UK"
+    ]
+  }
+]
