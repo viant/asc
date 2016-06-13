@@ -1,7 +1,7 @@
 # Datastore Connectivity for Aerospike (asc)
 
-Datastore Connectivity library for Aerospike in Go.
 
+[![Datastore Connectivity library for Aerospike in Go.](https://goreportcard.com/badge/github.com/viant/asc)](https://goreportcard.com/report/github.com/viant/asc)
 This library is compatible with Go 1.5+
 
 Please refer to [`CHANGELOG.md`](CHANGELOG.md) if you encounter breaking changes.

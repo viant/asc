@@ -19,8 +19,8 @@
 package asc
 
 import (
-	"github.com/viant/dsc"
 	"github.com/aerospike/aerospike-client-go"
+	"github.com/viant/dsc"
 	"github.com/viant/toolbox"
 )
 
@@ -30,8 +30,6 @@ type scanner struct {
 	converter toolbox.Converter
 	Values    aerospike.BinMap
 }
-
-
 
 func (s *scanner) Columns() ([]string, error) {
 	return s.columns, nil
@@ -43,7 +41,7 @@ func (s *scanner) Scan(destinations ...interface{}) error {
 		if dest == nil {
 			continue
 		}
-		if value, found := s.Values[columns[i]];found {
+		if value, found := s.Values[columns[i]]; found {
 			err := s.converter.AssignConverted(dest, value)
 			if err != nil {
 				return err
@@ -56,8 +54,8 @@ func (s *scanner) Scan(destinations ...interface{}) error {
 func newScanner(query *dsc.QueryStatement, config *dsc.Config, columns []string) *scanner {
 	converter := *toolbox.NewColumnConverter(config.GetDateLayout())
 	return &scanner{
-		query:query,
-		columns:columns,
-		converter:converter,
+		query:     query,
+		columns:   columns,
+		converter: converter,
 	}
 }

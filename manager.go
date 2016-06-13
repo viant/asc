@@ -19,26 +19,27 @@
 package asc
 
 import (
-	"github.com/viant/dsc"
 	"database/sql"
 	"fmt"
-	"github.com/aerospike/aerospike-client-go"
-	"strconv"
 	"reflect"
+	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
-	"runtime/debug"
+
+	"github.com/aerospike/aerospike-client-go"
+	"github.com/viant/dsc"
 	"github.com/viant/toolbox"
 )
 
 const (
-	keyColumnName = "keyColumnName"
+	keyColumnName             = "keyColumnName"
 	keyColumnNameDefaultValue = "id"
-	generationColumnName = "generationColumnName"
-	namespace = "namespace"
-	connectionTimeout = "connectionTimeout"
-	host = "host"
-	port = "port"
+	generationColumnName      = "generationColumnName"
+	namespace                 = "namespace"
+	connectionTimeout         = "connectionTimeout"
+	host                      = "host"
+	port                      = "port"
 )
 
 type config struct {
@@ -94,7 +95,7 @@ func convertIfNeeded(source interface{}) interface{} {
 	case reflect.String, reflect.Bool:
 		return toolbox.AsString(source)
 	case reflect.Float32, reflect.Float64:
-		stringValue := toolbox.AsString(source);
+		stringValue := toolbox.AsString(source)
 		if strings.Contains(stringValue, ".") {
 			return stringValue
 		}
@@ -118,7 +119,7 @@ func (am *manager) buildUpdateData(statement *dsc.DmlStatement, dmlParameters []
 	namespace := am.aerospikeConfig.namespace
 	parameters := toolbox.NewSliceIterator(dmlParameters)
 
-	columnValueMap, err:= statement.ColumnValueMap(parameters)
+	columnValueMap, err := statement.ColumnValueMap(parameters)
 	if err != nil {
 		return nil, nil, 0, fmt.Errorf("Failed to prepare update data: [%v] due to %v", dmlParameters, err)
 	}
@@ -232,15 +233,14 @@ func (am *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sq
 	writingPolicy.SendKey = true
 	writingPolicy.GenerationPolicy = aerospike.NONE
 
-	switch (statement.Type) {
-	case "INSERT" :
+	switch statement.Type {
+	case "INSERT":
 		writingPolicy.GenerationPolicy = aerospike.EXPECT_GEN_EQUAL
 		key, binMap, err = am.buildInsertData(statement, sqlParameters)
 		if err == nil {
 			err = client.Put(writingPolicy, key, binMap)
 		}
 	case "UPDATE":
-
 
 		key, binMap, generation, err = am.buildUpdateData(statement, sqlParameters)
 
@@ -264,7 +264,7 @@ func (am *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sq
 	return dsc.NewSQLResult(1, 0), nil
 }
 
-func (am *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner  dsc.Scanner) (toContinue bool, err error)) error {
+func (am *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	var err error
 	var recordset *aerospike.Recordset
 	if statement.AllField {
@@ -279,9 +279,9 @@ func (am *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStateme
 	return am.processRecordset(recordset, statement, readingHandler)
 }
 
-func (am *manager)  buildKeysForCriteria(statement *dsc.BaseStatement, parameters toolbox.Iterator) ([]*aerospike.Key, error) {
+func (am *manager) buildKeysForCriteria(statement *dsc.BaseStatement, parameters toolbox.Iterator) ([]*aerospike.Key, error) {
 	var result = make([]*aerospike.Key, 0)
-	criteria := statement.Criteria[0];
+	criteria := statement.Criteria[0]
 	namespace := am.aerospikeConfig.namespace
 	keyColumnName := am.aerospikeConfig.keyColunName
 	if criteria.LeftOperand != keyColumnName {
@@ -303,7 +303,7 @@ func (am *manager)  buildKeysForCriteria(statement *dsc.BaseStatement, parameter
 	return result, nil
 }
 
-func (am *manager) readBatch(client *aerospike.Client, statement *dsc.QueryStatement, queryParameters []interface{}, readingHandler func(scanner  dsc.Scanner) (toContinue bool, err error)) error {
+func (am *manager) readBatch(client *aerospike.Client, statement *dsc.QueryStatement, queryParameters []interface{}, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	parameters := toolbox.NewSliceIterator(queryParameters)
 	keys, err := am.buildKeysForCriteria(&statement.BaseStatement, parameters)
 	if err != nil {
@@ -325,7 +325,7 @@ func (am *manager) readBatch(client *aerospike.Client, statement *dsc.QueryState
 	return nil
 }
 
-func (am *manager) processRecord(key *aerospike.Key, record *aerospike.Record, aeroSpikeScanner *scanner, readingHandler func(scanner  dsc.Scanner) (toContinue bool, err error)) (toContinue bool, err error) {
+func (am *manager) processRecord(key *aerospike.Key, record *aerospike.Record, aeroSpikeScanner *scanner, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) (toContinue bool, err error) {
 	keyColumnName := am.aerospikeConfig.keyColunName
 	generationColumnName := am.aerospikeConfig.generationColumnName
 	var bins = record.Bins
@@ -343,7 +343,7 @@ func (am *manager) processRecord(key *aerospike.Key, record *aerospike.Record, a
 	return readingHandler(scanner)
 }
 
-func (am *manager) processRecords(records []*aerospike.Record, keys []*aerospike.Key, statement *dsc.QueryStatement, readingHandler func(scanner  dsc.Scanner) (toContinue bool, err error)) error {
+func (am *manager) processRecords(records []*aerospike.Record, keys []*aerospike.Key, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	if len(records) == 0 {
 		return nil
 	}
@@ -355,7 +355,7 @@ func (am *manager) processRecords(records []*aerospike.Record, keys []*aerospike
 			if err != nil {
 				return fmt.Errorf("Failed to fetch full scan data on statement %v, due to\n\t%v", statement.SQL, err)
 			}
-			if ! toContinue {
+			if !toContinue {
 				return nil
 			}
 		}
@@ -363,7 +363,7 @@ func (am *manager) processRecords(records []*aerospike.Record, keys []*aerospike
 	return nil
 }
 
-func (am *manager) processRecordset(recordset *aerospike.Recordset, statement *dsc.QueryStatement, readingHandler func(scanner  dsc.Scanner) (toContinue bool, err error)) error {
+func (am *manager) processRecordset(recordset *aerospike.Recordset, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	for record := range recordset.Results() {
 
 		if record.Err != nil {
@@ -377,7 +377,7 @@ func (am *manager) processRecordset(recordset *aerospike.Recordset, statement *d
 			if err != nil {
 				return fmt.Errorf("Failed to fetch full scan data on statement %v, due to\n\t%v", statement.SQL, err)
 			}
-			if ! toContinue {
+			if !toContinue {
 				return nil
 			}
 		}
@@ -386,7 +386,7 @@ func (am *manager) processRecordset(recordset *aerospike.Recordset, statement *d
 	return nil
 }
 
-func (am *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sql string, args []interface{}, readingHandler func(scanner  dsc.Scanner) (toContinue bool, err error)) error {
+func (am *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sql string, args []interface{}, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	client, err := asClient(connection.Unwrap(clientPointer))
 	if err != nil {
 		return err
@@ -417,9 +417,9 @@ func newConfig(iConfig *dsc.Config) *config {
 		generationColumnNameValue = value
 	}
 	return &config{
-		Config:iConfig,
-		namespace:namespace,
-		keyColunName:keyColumnName,
-		generationColumnName:generationColumnNameValue,
+		Config:               iConfig,
+		namespace:            namespace,
+		keyColunName:         keyColumnName,
+		generationColumnName: generationColumnNameValue,
 	}
 }

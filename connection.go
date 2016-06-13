@@ -19,17 +19,15 @@
 package asc
 
 import (
-	"github.com/viant/dsc"
-	 "github.com/aerospike/aerospike-client-go"
 	"fmt"
 	"reflect"
+
+	"github.com/aerospike/aerospike-client-go"
+	"github.com/viant/dsc"
 	"github.com/viant/toolbox"
 )
 
-
 var clientPointer = (*aerospike.Client)(nil)
-
-
 
 func asClient(wrapped interface{}) (*aerospike.Client, error) {
 	if result, ok := wrapped.(*aerospike.Client); ok {
@@ -39,21 +37,18 @@ func asClient(wrapped interface{}) (*aerospike.Client, error) {
 	return nil, fmt.Errorf("Failed cast as *aerospike.Client: was %v !", wrappedType.Type())
 }
 
-
 type connection struct {
 	dsc.AbstractConnection
 	client *aerospike.Client
 }
 
-func (c *connection) CloseNow() (error) {
+func (c *connection) CloseNow() error {
 	client := c.client
 	client.Close()
 	return nil
 }
 
-
-
-func (c *connection) Begin() (error) {
+func (c *connection) Begin() error {
 	return nil
 }
 
@@ -64,14 +59,13 @@ func (c *connection) Unwrap(target interface{}) interface{} {
 	panic(fmt.Sprintf("Unsupported target type %v", target))
 }
 
-func (c *connection) Commit() (error) {
-	return nil;
+func (c *connection) Commit() error {
+	return nil
 }
 
-func (c *connection) Rollback() (error) {
-	return nil;
+func (c *connection) Rollback() error {
+	return nil
 }
-
 
 type connectionProvider struct {
 	dsc.AbstractConnectionProvider
@@ -84,23 +78,21 @@ func (p *connectionProvider) NewConnection() (dsc.Connection, error) {
 		return nil, err
 	}
 
-	var aerospikeConnection = &connection{client:client}
+	var aerospikeConnection = &connection{client: client}
 	var connection dsc.Connection = aerospikeConnection
 	var super = dsc.NewAbstractConnection(config, p.Provider.ConnectionPool(), connection)
 	aerospikeConnection.AbstractConnection = super
 	return connection, nil
 }
 
-
 func newConnectionProvider(config *dsc.Config) dsc.ConnectionProvider {
 	if config.MaxPoolSize == 0 {
 		config.MaxPoolSize = 1
 	}
-	aerospikeConnectionProvider:=&connectionProvider{}
+	aerospikeConnectionProvider := &connectionProvider{}
 	var self dsc.ConnectionProvider = aerospikeConnectionProvider
 	var super = dsc.NewAbstractConnectionProvider(config, make(chan dsc.Connection, config.MaxPoolSize), self)
 	aerospikeConnectionProvider.AbstractConnectionProvider = super
 	aerospikeConnectionProvider.AbstractConnectionProvider.Provider = self
 	return aerospikeConnectionProvider
 }
-

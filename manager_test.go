@@ -19,50 +19,42 @@
 package asc_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
-	"github.com/viant/dsc"
-	"fmt"
-	"github.com/stretchr/testify/assert"
+
 	_ "github.com/aerospike/aerospike-client-go"
+	"github.com/stretchr/testify/assert"
 	_ "github.com/viant/asc"
+	"github.com/viant/dsc"
 	"github.com/viant/dsunit"
 )
 
-
-
 type User struct {
-	Id              int `column:"id"`
-	Username        string `column:"username"`
-	Active          bool `column:"active"`
-	LastAccessTime  *time.Time  `column:"last_time"`
-	Salary          float64 `column:"salary"`
-	Comments        string `column:"comments"`
-	Photo           []byte `column:"photo"`
-	Generation      uint64 `column:"scn"`
-	CitiesLived     *[]string `column:"city_lived"`
-	CountryLived     []string `column:"country_lived"`
-	CitiesVisited map[string]int `column:"city_visited"`
+	Id             int             `column:"id"`
+	Username       string          `column:"username"`
+	Active         bool            `column:"active"`
+	LastAccessTime *time.Time      `column:"last_time"`
+	Salary         float64         `column:"salary"`
+	Comments       string          `column:"comments"`
+	Photo          []byte          `column:"photo"`
+	Generation     uint64          `column:"scn"`
+	CitiesLived    *[]string       `column:"city_lived"`
+	CountryLived   []string        `column:"country_lived"`
+	CitiesVisited  map[string]int  `column:"city_visited"`
 	CountryVisited *map[string]int `column:"country_visit"`
 }
-
 
 func (this User) String() string {
 	return fmt.Sprintf("Id: %v, Name: %v, Active:%v, Salary: %v Comments: %v, Last Access Time %v\n", this.Id, this.Username, this.Active, this.Salary, this.Comments, this.LastAccessTime)
 }
 
-
-
-func Manager(t *testing.T)  dsc.Manager {
+func Manager(t *testing.T) dsc.Manager {
 	config := dsc.NewConfig("aerospike", "", "host:127.0.0.1,port:3000,namespace:test,generationColumnName:generation,dateLayout:2006-01-02 15:04:05.000")
 	factory := dsc.NewManagerFactory()
-	manager, _:=  factory.Create(config)
+	manager, _ := factory.Create(config)
 	return manager
 }
-
-
-
-
 
 func TestReadSingle(t *testing.T) {
 
@@ -71,7 +63,7 @@ func TestReadSingle(t *testing.T) {
 
 	manager := Manager(t)
 	singleUser := User{}
-	success, err:= manager.ReadSingle(&singleUser, "SELECT id, username, active, salary, comments,last_time, photo, city_lived, country_lived, city_visited, country_visit FROM users WHERE id = ?", []interface{}{1}, nil)
+	success, err := manager.ReadSingle(&singleUser, "SELECT id, username, active, salary, comments,last_time, photo, city_lived, country_lived, city_visited, country_visit FROM users WHERE id = ?", []interface{}{1}, nil)
 	assert.Nil(t, err)
 	assert.Equal(t, true, success, "Should fetch a user")
 	assert.Equal(t, "Edi", singleUser.Username)
@@ -87,19 +79,15 @@ func TestReadSingle(t *testing.T) {
 
 	assert.Equal(t, 2, len(singleUser.CitiesVisited))
 
-	vistedCounter := singleUser.CitiesVisited["Las Vegas"];
+	vistedCounter := singleUser.CitiesVisited["Las Vegas"]
 	assert.Equal(t, 1, vistedCounter)
 
 	assert.Equal(t, 3, (*singleUser.CountryVisited)["Poland"])
-
 
 	_, _, err = manager.PersistSingle(&singleUser, "users", nil)
 	assert.Nil(t, err)
 
 }
-
-
-
 
 func TestReadAll(t *testing.T) {
 
@@ -144,9 +132,8 @@ func TestReadAll(t *testing.T) {
 				t.Error("Failed test: " + err.Error())
 			}
 
-
 			var indexedUsers = make(map[int]User)
-			for _, user:= range users {
+			for _, user := range users {
 				indexedUsers[user.Id] = user
 			}
 
@@ -165,15 +152,13 @@ func TestReadAll(t *testing.T) {
 				assert.Equal(t, 4, user.Id)
 				assert.Equal(t, "Vudi", user.Username)
 				assert.Equal(t, true, user.Active)
-				assert.Equal(t, 143.0	, user.Salary)
+				assert.Equal(t, 143.0, user.Salary)
 				assert.Equal(t, "xyz", user.Comments)
 				assert.Equal(t, "cde", string(user.Photo))
 			}
 		}
 	}
 }
-
-
 
 func TestPersistAll(t *testing.T) {
 	dsunit.InitDatastoreFromURL(t, "test://test/datastore_init.json")
@@ -187,19 +172,19 @@ func TestPersistAll(t *testing.T) {
 		for i, user := range users {
 			if user.Id == 4 {
 				users[i].Username = "Hogi"
-				users[i].CountryLived=[]string{"USA", "France", "UK"}
+				users[i].CountryLived = []string{"USA", "France", "UK"}
 				citiesLived := []string{"Los Angeles", "Paris", "London"}
 				users[i].CitiesLived = &citiesLived
 			}
 		}
 		citiesLived := []string{"Los Angeles", "London"}
-		users = append(users, User{Id:3, Username:"Gadi", Active:true, Salary:123.4, Comments:"Abcdef",
-			CountryLived:[]string{"USA", "UK"},
-			CitiesLived: &citiesLived,
-			CitiesVisited:map[string]int{
-				"Warsaw":1,
-				"Berlin":2,
-				"France":1,
+		users = append(users, User{Id: 3, Username: "Gadi", Active: true, Salary: 123.4, Comments: "Abcdef",
+			CountryLived: []string{"USA", "UK"},
+			CitiesLived:  &citiesLived,
+			CitiesVisited: map[string]int{
+				"Warsaw": 1,
+				"Berlin": 2,
+				"France": 1,
 			},
 		})
 		inserted, updated, err := manager.PersistAll(&users, "users", nil)
