@@ -2,6 +2,8 @@
 
 
 [![Datastore Connectivity library for Aerospike in Go.](https://goreportcard.com/badge/github.com/viant/asc)](https://goreportcard.com/report/github.com/viant/asc)
+[![GoDoc](https://godoc.org/github.com/viant/asc?status.svg)](https://godoc.org/github.com/viant/asc)
+
 This library is compatible with Go 1.5+
 
 Please refer to [`CHANGELOG.md`](CHANGELOG.md) if you encounter breaking changes.
@@ -83,6 +85,9 @@ func main() {
 }
 ```
 
+## GoCover
+
+[![GoCover](https://gocover.io/github.com/viant/asc)](https://gocover.io/github.com/viant/asc)
 
 
 <a name="License"></a>
