@@ -72,7 +72,7 @@ type connectionProvider struct {
 }
 
 func (p *connectionProvider) NewConnection() (dsc.Connection, error) {
-	config := p.Provider.Config()
+	config := p.ConnectionProvider.Config()
 	client, err := aerospike.NewClient(config.Get("host"), toolbox.AsInt(config.Get("port")))
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func (p *connectionProvider) NewConnection() (dsc.Connection, error) {
 
 	var aerospikeConnection = &connection{client: client}
 	var connection dsc.Connection = aerospikeConnection
-	var super = dsc.NewAbstractConnection(config, p.Provider.ConnectionPool(), connection)
+	var super = dsc.NewAbstractConnection(config, p.ConnectionProvider.ConnectionPool(), connection)
 	aerospikeConnection.AbstractConnection = super
 	return connection, nil
 }
@@ -90,9 +90,9 @@ func newConnectionProvider(config *dsc.Config) dsc.ConnectionProvider {
 		config.MaxPoolSize = 1
 	}
 	aerospikeConnectionProvider := &connectionProvider{}
-	var self dsc.ConnectionProvider = aerospikeConnectionProvider
-	var super = dsc.NewAbstractConnectionProvider(config, make(chan dsc.Connection, config.MaxPoolSize), self)
+	var connectionProvider dsc.ConnectionProvider = aerospikeConnectionProvider
+	var super = dsc.NewAbstractConnectionProvider(config, make(chan dsc.Connection, config.MaxPoolSize), connectionProvider)
 	aerospikeConnectionProvider.AbstractConnectionProvider = super
-	aerospikeConnectionProvider.AbstractConnectionProvider.Provider = self
+	aerospikeConnectionProvider.AbstractConnectionProvider.ConnectionProvider = connectionProvider
 	return aerospikeConnectionProvider
 }
