@@ -17,7 +17,7 @@
  *
  */
 
-//package asc - Aerospike connection
+//Package asc - Aerospike connection
 package asc
 
 import (

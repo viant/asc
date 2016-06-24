@@ -17,7 +17,7 @@
  *
  */
 
-//package asc - Aerospike datastore dialect
+//Package asc - Aerospike datastore dialect
 package asc
 
 import (

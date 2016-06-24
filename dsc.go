@@ -17,7 +17,7 @@
  *
  */
 
-//package asc - Datastore connectivity factory and dialect registry
+//Package asc - Datastore connectivity factory and dialect registry
 package asc
 
 import (

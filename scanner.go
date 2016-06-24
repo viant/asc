@@ -17,7 +17,7 @@
  *
  */
 
-//package asc - Aersopike datastore record scanner
+//Package asc - Aersopike datastore record scanner
 package asc
 
 import (

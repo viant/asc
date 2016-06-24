@@ -17,7 +17,7 @@
  *
  */
 
-//package asc - Aersopike datastore manager
+//Package asc - Aersopike datastore connectivity manager
 package asc
 
 /*

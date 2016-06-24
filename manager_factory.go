@@ -17,7 +17,7 @@
  *
  */
 
-//package asc - Aersopike datastore manager factory
+//Package asc - Aersopike datastore manager factory
 package asc
 
 import (
@@ -26,6 +26,7 @@ import (
 )
 
 type managerFactory struct{}
+
 
 func (f *managerFactory) Create(config *dsc.Config) (dsc.Manager, error) {
 	var connectionProvider = newConnectionProvider(config)
