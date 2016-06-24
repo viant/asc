@@ -50,7 +50,7 @@ func (this User) String() string {
 }
 
 func Manager(t *testing.T) dsc.Manager {
-	config := dsc.NewConfig("aerospike", "", "host:127.0.0.1,port:3000,namespace:test,generationColumnName:generation,dateLayout:2006-01-02 15:04:05.000")
+	config := dsc.NewConfig("aerospike", "", "host:85.214.44.93,port:3000,namespace:test,generationColumnName:generation,dateLayout:2006-01-02 15:04:05.000")
 	factory := dsc.NewManagerFactory()
 	manager, _ := factory.Create(config)
 	return manager
@@ -98,7 +98,7 @@ func TestReadAll(t *testing.T) {
 	{
 		var users = make([]User, 0)
 
-		err := manager.ReadAll(&users, "SELECT id, username, active, salary, comments,last_access_time, photo, city_lived, country_lived, city_visited, country_visit  FROM users WHERE id IN (?,?)", []interface{}{1, 2}, nil)
+		err := manager.ReadAll(&users, "SELECT id, username, active, salary, comments,last_time, photo, city_lived, country_lived, city_visited, country_visit  FROM users WHERE id IN (?,?)", []interface{}{1, 2}, nil)
 		if err != nil {
 			t.Error("Failed test: " + err.Error())
 		}
@@ -127,7 +127,7 @@ func TestReadAll(t *testing.T) {
 		{
 			var users = make([]User, 0)
 
-			err := manager.ReadAll(&users, "SELECT id, username, active, salary, comments,last_access_time, photo, city_lived, country_lived, city_visited, country_visit  FROM users", nil, nil)
+			err := manager.ReadAll(&users, "SELECT id, username, active, salary, comments,last_time, photo, city_lived, country_lived, city_visited, country_visit  FROM users", nil, nil)
 			if err != nil {
 				t.Error("Failed test: " + err.Error())
 			}

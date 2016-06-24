@@ -16,6 +16,8 @@
  *  the License.
  *
  */
+
+//package asc - Aersopike datastore record scanner
 package asc
 
 import (

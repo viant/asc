@@ -16,6 +16,8 @@
  *  the License.
  *
  */
+
+//package asc - Aerospike datastore dialect
 package asc
 
 import (

@@ -16,6 +16,8 @@
  *  the License.
  *
  */
+
+//package asc - Aerospike connection
 package asc
 
 import (

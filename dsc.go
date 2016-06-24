@@ -16,6 +16,8 @@
  *  the License.
  *
  */
+
+//package asc -
 package asc
 
 import (

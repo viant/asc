@@ -16,6 +16,8 @@
  *  the License.
  *
  */
+
+//package asc - Aersopike datastore manager factory
 package asc
 
 import (

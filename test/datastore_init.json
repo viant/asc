@@ -8,7 +8,7 @@
         "DriverName": "aerospike",
         "Parameters":{
           "namespace":"test",
-          "host":"127.0.0.1",
+          "host":"85.214.44.93",
           "port":"3000",
           "generationColumnName":"scn",
           "dateFormat":"yyyy-MM-dd hh:mm:ss"
