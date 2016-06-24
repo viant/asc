@@ -88,7 +88,7 @@ func (d dialect) GetTables(manager dsc.Manager, datastore string) ([]string, err
 	if value, found := result[command]; found {
 		for _, item := range strings.Split(value, ":") {
 			if strings.HasPrefix(item, "set_name") {
-				var setName = item[9:len(item)]
+				var setName = item[9:]
 				tables = append(tables, setName)
 			}
 		}
