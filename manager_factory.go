@@ -27,7 +27,6 @@ import (
 
 type managerFactory struct{}
 
-
 func (f *managerFactory) Create(config *dsc.Config) (dsc.Manager, error) {
 	var connectionProvider = newConnectionProvider(config)
 	manager := &manager{}
