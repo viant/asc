@@ -6,7 +6,7 @@ import (
 
 func register() {
 	dsc.RegisterManagerFactory("aerospike", newManagerFactory())
-	dsc.RegisterDatastoreDialectable("aerospike", newDialect())
+	dsc.RegisterDatastoreDialect("aerospike", newDialect())
 }
 
 func init() {

@@ -4,7 +4,7 @@ package asc
 
 Package asc - Aersopike datastore manager factory
 
-This library comes with the aerospike datastore manager implementing datastore connectivity manager (dsc)
+This library comes with the aerospike datastore manager implementing datastore connectivity manager (viant/dsc)
 Is uses native aerospike client to connect to NoSQL Aerospike server, and adds SQL layer on top of it.
 
 Usage:

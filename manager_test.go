@@ -32,7 +32,7 @@ func (this User) String() string {
 }
 
 func Manager(t *testing.T) dsc.Manager {
-	config := dsc.NewConfig("aerospike", "", "host:127.0.0.1,port:3000,namespace:test,generationColumnName:generation,dateLayout:2006-01-02 15:04:05.000")
+	config := dsc.NewConfig("aerospike", "", "host:104.197.250.82,port:3000,namespace:test,generationColumnName:generation,dateLayout:2006-01-02 15:04:05.000,connectionTimeout:1000")
 	factory := dsc.NewManagerFactory()
 	manager, _ := factory.Create(config)
 	return manager
@@ -71,11 +71,17 @@ func TestReadSingle(t *testing.T) {
 
 }
 
+
+
 func TestReadAll(t *testing.T) {
 
 	dsunit.InitDatastoreFromURL(t, "test://test/datastore_init.json")
 	dsunit.PrepareDatastoreFor(t, "test", "test://test/", "ReadAll")
-	manager := Manager(t)
+	factory := dsc.NewManagerFactory()
+	configUrl := dsunit.ExpandTestProtocolAsURLIfNeeded( "test://test/config/store.json")
+	manager, err := factory.CreateFromURL(configUrl)
+	assert.Nil(t, err)
+	assert.NotNil(t, manager)
 
 	{
 		var users = make([]User, 0)
@@ -177,5 +183,18 @@ func TestPersistAll(t *testing.T) {
 	}
 	dsunit.ExpectDatasetFor(t, "test", dsunit.SnapshotDatasetCheckPolicy, "test://test/", "PersistAll")
 	dsunit.ExpectDatasetFor(t, "test", dsunit.FullTableDatasetCheckPolicy, "test://test/", "PersistAll")
+
+}
+
+
+
+func TestDelete(t *testing.T) {
+	dsunit.InitDatastoreFromURL(t, "test://test/datastore_init.json")
+	dsunit.PrepareDatastoreFor(t, "test", "test://test/", "Delete")
+	manager := Manager(t)
+	manager.Execute("DELETE FROM users WHERE id = ?", 4)
+
+	dsunit.ExpectDatasetFor(t, "test", dsunit.FullTableDatasetCheckPolicy, "test://test/", "Delete")
+
 
 }

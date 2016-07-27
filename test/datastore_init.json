@@ -4,16 +4,7 @@
       "Datastore": "test",
       "AdminDbName": "test",
       "ClearDatastore": true,
-      "Config": {
-        "DriverName": "aerospike",
-        "Parameters":{
-          "namespace":"test",
-          "host":"127.0.0.1",
-          "port":"3000",
-          "generationColumnName":"scn",
-          "dateFormat":"yyyy-MM-dd hh:mm:ss"
-        }
-      },
+      "ConfigUrl": "test://test/config/store.json",
       "Descriptors": [
         {
           "Table": "users",

@@ -247,6 +247,8 @@ func (am *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sq
 	return dsc.NewSQLResult(1, 0), nil
 }
 
+
+
 func (am *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	var err error
 	var recordset *aerospike.Recordset

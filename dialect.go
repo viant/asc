@@ -17,6 +17,8 @@ type dialect struct{ dsc.DatastoreDialect }
 func getConnection(config *dsc.Config) (*aerospike.Connection, error) {
 	hostPort := config.Get(host) + ":" + config.Get(port)
 	connectionTimeoutInMs := defaulConnectionTimeout
+
+
 	if config.Has(connectionTimeout) {
 		timeout := toolbox.AsInt(config.Get(connectionTimeout))
 		connectionTimeoutInMs = time.Duration(timeout) * time.Millisecond
@@ -53,6 +55,8 @@ func (d dialect) GetDatastores(manager dsc.Manager) ([]string, error) {
 	return nil, fmt.Errorf("Failed to lookup datastores :%v", result)
 }
 
+
+
 func (d dialect) GetCurrentDatastore(manager dsc.Manager) (string, error) {
 	config := manager.Config()
 	return config.Get("namespace"), nil
@@ -69,6 +73,9 @@ func (d dialect) GetTables(manager dsc.Manager, datastore string) ([]string, err
 		for _, item := range strings.Split(value, ":") {
 			if strings.HasPrefix(item, "set_name") {
 				var setName = item[9:]
+				tables = append(tables, setName)
+			} else if strings.HasPrefix(item, "set") {
+				var setName = item[4:]
 				tables = append(tables, setName)
 			}
 		}
