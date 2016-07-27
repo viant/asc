@@ -18,7 +18,6 @@ func getConnection(config *dsc.Config) (*aerospike.Connection, error) {
 	hostPort := config.Get(host) + ":" + config.Get(port)
 	connectionTimeoutInMs := defaulConnectionTimeout
 
-
 	if config.Has(connectionTimeout) {
 		timeout := toolbox.AsInt(config.Get(connectionTimeout))
 		connectionTimeoutInMs = time.Duration(timeout) * time.Millisecond
@@ -54,8 +53,6 @@ func (d dialect) GetDatastores(manager dsc.Manager) ([]string, error) {
 	}
 	return nil, fmt.Errorf("Failed to lookup datastores :%v", result)
 }
-
-
 
 func (d dialect) GetCurrentDatastore(manager dsc.Manager) (string, error) {
 	config := manager.Config()

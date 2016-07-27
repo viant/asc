@@ -71,14 +71,12 @@ func TestReadSingle(t *testing.T) {
 
 }
 
-
-
 func TestReadAll(t *testing.T) {
 
 	dsunit.InitDatastoreFromURL(t, "test://test/datastore_init.json")
 	dsunit.PrepareDatastoreFor(t, "test", "test://test/", "ReadAll")
 	factory := dsc.NewManagerFactory()
-	configUrl := dsunit.ExpandTestProtocolAsURLIfNeeded( "test://test/config/store.json")
+	configUrl := dsunit.ExpandTestProtocolAsURLIfNeeded("test://test/config/store.json")
 	manager, err := factory.CreateFromURL(configUrl)
 	assert.Nil(t, err)
 	assert.NotNil(t, manager)
@@ -186,8 +184,6 @@ func TestPersistAll(t *testing.T) {
 
 }
 
-
-
 func TestDelete(t *testing.T) {
 	dsunit.InitDatastoreFromURL(t, "test://test/datastore_init.json")
 	dsunit.PrepareDatastoreFor(t, "test", "test://test/", "Delete")
@@ -195,6 +191,5 @@ func TestDelete(t *testing.T) {
 	manager.Execute("DELETE FROM users WHERE id = ?", 4)
 
 	dsunit.ExpectDatasetFor(t, "test", dsunit.FullTableDatasetCheckPolicy, "test://test/", "Delete")
-
 
 }

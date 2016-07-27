@@ -1,38 +1,34 @@
 package asc_test
 
 import (
-	"testing"
+	"github.com/stretchr/testify/assert"
 	"github.com/viant/dsc"
 	"github.com/viant/dsunit"
-	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
 func TestDialectGetDatastores(t *testing.T) {
 	factory := dsc.NewManagerFactory()
-	configUrl := dsunit.ExpandTestProtocolAsURLIfNeeded( "test://test/config/store.json")
+	configUrl := dsunit.ExpandTestProtocolAsURLIfNeeded("test://test/config/store.json")
 	manager, err := factory.CreateFromURL(configUrl)
 	assert.Nil(t, err)
 	dialect := dsc.GetDatastoreDialect("aerospike")
 
-	names, err :=dialect.GetDatastores(manager)
+	names, err := dialect.GetDatastores(manager)
 	assert.Nil(t, err)
 	assert.Equal(t, 1, len(names))
 }
 
-
-
 func TestDialectGetDatastore(t *testing.T) {
 	factory := dsc.NewManagerFactory()
-	configUrl := dsunit.ExpandTestProtocolAsURLIfNeeded( "test://test/config/store.json")
+	configUrl := dsunit.ExpandTestProtocolAsURLIfNeeded("test://test/config/store.json")
 	manager, err := factory.CreateFromURL(configUrl)
 	assert.Nil(t, err)
 	dialect := dsc.GetDatastoreDialect("aerospike")
-	name, err :=dialect.GetCurrentDatastore(manager)
+	name, err := dialect.GetCurrentDatastore(manager)
 	assert.Nil(t, err)
 	assert.Equal(t, "test", name)
 }
-
-
 
 func TestDialectGetTables(t *testing.T) {
 	factory := dsc.NewManagerFactory()
@@ -43,8 +39,7 @@ func TestDialectGetTables(t *testing.T) {
 	assert.NotNil(t, manager)
 
 	dialect := dsc.GetDatastoreDialect("aerospike")
-	_, err =dialect.GetTables(manager, "test")
+	_, err = dialect.GetTables(manager, "test")
 	assert.Nil(t, err)
 
 }
-
