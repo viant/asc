@@ -30,23 +30,11 @@ func (c *connection) CloseNow() error {
 	return nil
 }
 
-func (c *connection) Begin() error {
-	return nil
-}
-
 func (c *connection) Unwrap(target interface{}) interface{} {
 	if target == clientPointer {
 		return c.client
 	}
 	panic(fmt.Sprintf("Unsupported target type %v", target))
-}
-
-func (c *connection) Commit() error {
-	return nil
-}
-
-func (c *connection) Rollback() error {
-	return nil
 }
 
 type connectionProvider struct {

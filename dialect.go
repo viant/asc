@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"errors"
 	"github.com/aerospike/aerospike-client-go"
 	"github.com/viant/dsc"
 	"github.com/viant/toolbox"
@@ -15,6 +16,9 @@ var defaulConnectionTimeout = 500 * time.Millisecond
 type dialect struct{ dsc.DatastoreDialect }
 
 func getConnection(config *dsc.Config) (*aerospike.Connection, error) {
+	if !config.Has(host) || !config.Has(port) {
+		return nil, errors.New("Port or host are not poresent")
+	}
 	hostPort := config.Get(host) + ":" + config.Get(port)
 	connectionTimeoutInMs := defaulConnectionTimeout
 

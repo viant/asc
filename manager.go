@@ -205,7 +205,7 @@ func (am *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sq
 	parser := dsc.NewDmlParser()
 	statement, err := parser.Parse(sql)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to parse %v due to %v", sql, err)
 	}
 
 	var key *aerospike.Key
@@ -378,6 +378,7 @@ func (am *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, s
 	if err != nil {
 		return fmt.Errorf("Failed to parse statement %v, %v", sql, err)
 	}
+
 	if statement.Criteria == nil || len(statement.Criteria) == 0 {
 		return am.scanAll(client, statement, readingHandler)
 	} else if len(statement.Criteria) > 1 {

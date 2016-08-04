@@ -1,0 +1,10 @@
+{
+
+    "DriverName": "aerospike",
+    "Parameters": {
+      "namespace": "test",
+      "host": "104.197.250.82",
+      "generationColumnName": "scn",
+      "dateFormat": "yyyy-MM-dd hh:mm:ss"
+    }
+}

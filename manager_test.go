@@ -184,6 +184,23 @@ func TestPersistAll(t *testing.T) {
 
 }
 
+type BadUser struct {
+	Id       int    `column:"id"`
+	Username string `column:"username_abcdefghojk"`
+}
+
+//This test test persistence failure due to to long field
+func TestPersistFailureAll(t *testing.T) {
+	manager := Manager(t)
+
+	{
+		var users = make([]BadUser, 0)
+		users = append(users, BadUser{Id: 1, Username: "test"})
+		_, _, err := manager.PersistAll(&users, "users", nil)
+		assert.NotNil(t, err)
+	}
+}
+
 func TestDelete(t *testing.T) {
 	dsunit.InitDatastoreFromURL(t, "test://test/datastore_init.json")
 	dsunit.PrepareDatastoreFor(t, "test", "test://test/", "Delete")
@@ -191,5 +208,28 @@ func TestDelete(t *testing.T) {
 	manager.Execute("DELETE FROM users WHERE id = ?", 4)
 
 	dsunit.ExpectDatasetFor(t, "test", dsunit.FullTableDatasetCheckPolicy, "test://test/", "Delete")
+
+}
+
+func TestInvalidSql(t *testing.T) {
+	dsunit.InitDatastoreFromURL(t, "test://test/datastore_init.json")
+	dsunit.PrepareDatastoreFor(t, "test", "test://test/", "Delete")
+	manager := Manager(t)
+	_, err := manager.Execute("SET FROM users WHERE id = ?", 4)
+	assert.NotNil(t, err)
+}
+
+func TestCreateFromInvalidURL(t *testing.T) {
+	factory := dsc.NewManagerFactory()
+	{
+		configUrl := dsunit.ExpandTestProtocolAsURLIfNeeded("test://test/config/storeABC.json")
+		_, err := factory.CreateFromURL(configUrl)
+		assert.NotNil(t, err)
+	}
+	{
+		configUrl := dsunit.ExpandTestProtocolAsURLIfNeeded("test://test/config/store_broken.json")
+		_, err := factory.CreateFromURL(configUrl)
+		assert.NotNil(t, err)
+	}
 
 }
