@@ -20,7 +20,7 @@ func asClient(wrapped interface{}) (*aerospike.Client, error) {
 }
 
 type connection struct {
-	dsc.AbstractConnection
+	*dsc.AbstractConnection
 	client *aerospike.Client
 }
 
@@ -38,7 +38,7 @@ func (c *connection) Unwrap(target interface{}) interface{} {
 }
 
 type connectionProvider struct {
-	dsc.AbstractConnectionProvider
+	*dsc.AbstractConnectionProvider
 }
 
 func (p *connectionProvider) NewConnection() (dsc.Connection, error) {
