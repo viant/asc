@@ -29,6 +29,22 @@ func getConnection(config *dsc.Config) (*aerospike.Connection, error) {
 	return aerospike.NewConnection(hostPort, connectionTimeoutInMs)
 }
 
+
+
+//GetKeyName returns a name of column name that is a key, or coma separated list if complex key
+
+func (d dialect) GetKeyName(manager dsc.Manager, datastore, table string) string {
+	config := manager.Config()
+	var keyName = keyColumnNameDefaultValue
+	if config.Has(keyColumnName) {
+		keyName = config.Get(keyColumnName)
+	}
+	return keyName
+}
+
+
+
+
 func (d dialect) SendAdminCommand(manager dsc.Manager, command string) (map[string]string, error) {
 	connection, err := getConnection(manager.Config())
 	if err != nil {
