@@ -130,6 +130,8 @@ func (am *manager) buildUpdateData(statement *dsc.DmlStatement, dmlParameters []
 }
 
 func (am *manager) buildInsertData(statement *dsc.DmlStatement, dmlParameters []interface{}) (key *aerospike.Key, binMap aerospike.BinMap, err error) {
+
+
 	keyColumnName := am.aerospikeConfig.keyColunName
 	namespace := am.aerospikeConfig.namespace
 	binMap = make(aerospike.BinMap)
@@ -276,6 +278,10 @@ func (am *manager) buildKeysForCriteria(statement *dsc.BaseStatement, parameters
 
 	for _, criteriaValue := range criteriaValues {
 		criteriaValue = convertIfNeeded(criteriaValue)
+		if criteriaValue == nil {
+			continue
+		}
+
 		value, err := aerospike.NewKey(namespace, statement.Table, criteriaValue)
 		if err != nil {
 			return nil, err
@@ -289,7 +295,7 @@ func (am *manager) readBatch(client *aerospike.Client, statement *dsc.QueryState
 	parameters := toolbox.NewSliceIterator(queryParameters)
 	keys, err := am.buildKeysForCriteria(&statement.BaseStatement, parameters)
 	if err != nil {
-		return err
+			return err
 	}
 	var records []*aerospike.Record
 	if statement.AllField {
@@ -378,7 +384,6 @@ func (am *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, s
 	if err != nil {
 		return fmt.Errorf("Failed to parse statement %v, %v", sql, err)
 	}
-
 	if statement.Criteria == nil || len(statement.Criteria) == 0 {
 		return am.scanAll(client, statement, readingHandler)
 	} else if len(statement.Criteria) > 1 {
@@ -388,21 +393,24 @@ func (am *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, s
 	}
 }
 
-func newConfig(iConfig *dsc.Config) *config {
-	var keyColumnName = keyColumnNameDefaultValue
-	if iConfig.Has(keyColumnName) {
-		keyColumnName = iConfig.Get(keyColumnName)
+func newConfig(dscConfig *dsc.Config) *config {
+	var keyName = keyColumnNameDefaultValue
+	if dscConfig.Has(keyColumnName) {
+		keyName = dscConfig.Get(keyColumnName)
+
 	}
-	namespace := iConfig.Get(namespace)
+
+	fmt.Printf("Setting key column as %v\n", keyName)
+	namespace := dscConfig.Get(namespace)
 	var generationColumnNameValue string
-	if iConfig.Has(generationColumnName) {
-		value := iConfig.Get(generationColumnName)
+	if dscConfig.Has(generationColumnName) {
+		value := dscConfig.Get(generationColumnName)
 		generationColumnNameValue = value
 	}
 	return &config{
-		Config:               iConfig,
+		Config:               dscConfig,
 		namespace:            namespace,
-		keyColunName:         keyColumnName,
+		keyColunName:         keyName,
 		generationColumnName: generationColumnNameValue,
 	}
 }
