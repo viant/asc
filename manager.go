@@ -18,6 +18,7 @@ const (
 	keyColumnName             = "keyColumnName"
 	keyColumnNameDefaultValue = "id"
 	generationColumnName      = "generationColumnName"
+	excludedColumns           = "excludedColumns"
 	namespace                 = "namespace"
 	connectionTimeout         = "connectionTimeout"
 	host                      = "host"
@@ -29,6 +30,7 @@ type config struct {
 	keyColunName         string
 	generationColumnName string
 	namespace            string
+	excludedColumns      []string
 }
 
 type manager struct {
@@ -96,6 +98,7 @@ func convertIfNeeded(source interface{}) interface{} {
 	panic(fmt.Sprintf("Unsupproted %T %v\n", source, source))
 }
 
+
 func (am *manager) buildUpdateData(statement *dsc.DmlStatement, dmlParameters []interface{}) (key *aerospike.Key, binMap aerospike.BinMap, generation uint32, err error) {
 	keyColumnName := am.aerospikeConfig.keyColunName
 	namespace := am.aerospikeConfig.namespace
@@ -131,7 +134,6 @@ func (am *manager) buildUpdateData(statement *dsc.DmlStatement, dmlParameters []
 
 func (am *manager) buildInsertData(statement *dsc.DmlStatement, dmlParameters []interface{}) (key *aerospike.Key, binMap aerospike.BinMap, err error) {
 
-
 	keyColumnName := am.aerospikeConfig.keyColunName
 	namespace := am.aerospikeConfig.namespace
 	binMap = make(aerospike.BinMap)
@@ -144,6 +146,7 @@ func (am *manager) buildInsertData(statement *dsc.DmlStatement, dmlParameters []
 		if len(k) > 14 {
 			return nil, nil, fmt.Errorf("Failed to build insert dataset column name:'%v' to long max 14 characters", k)
 		}
+
 		value := convertIfNeeded(originalValue)
 		if k == keyColumnName {
 			key, err = aerospike.NewKey(namespace, statement.Table, value)
@@ -199,6 +202,21 @@ func (am *manager) deleteSelected(client *aerospike.Client, statement *dsc.DmlSt
 	return dsc.NewSQLResult(int64(i), 0), nil
 }
 
+func (am *manager) removedEmptyOrExcluded(binMap aerospike.BinMap) {
+
+	for k,v :=range binMap {
+		if v == nil {
+			delete(binMap, k)
+		}
+	}
+	if len(am.aerospikeConfig.excludedColumns)  == 0 {
+		return
+	}
+	for _, column := range am.aerospikeConfig.excludedColumns {
+		delete(binMap, column)
+	}
+}
+
 func (am *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sqlParameters []interface{}) (result sql.Result, err error) {
 	client, err := asClient(connection.Unwrap(clientPointer))
 	if err != nil {
@@ -219,10 +237,18 @@ func (am *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sq
 
 	switch statement.Type {
 	case "INSERT":
-		writingPolicy.GenerationPolicy = aerospike.EXPECT_GEN_EQUAL
+		if am.aerospikeConfig.generationColumnName != "" {
+			writingPolicy.GenerationPolicy = aerospike.EXPECT_GEN_EQUAL
+		}
 		key, binMap, err = am.buildInsertData(statement, sqlParameters)
+		am.removedEmptyOrExcluded(binMap)
 		if err == nil {
-			err = client.Put(writingPolicy, key, binMap)
+			if len(binMap) > 0 {
+				err = client.Put(writingPolicy, key, binMap)
+			}
+		}
+		if err != nil {
+			err = fmt.Errorf("Failed to insert %v %v, %v", key, binMap, err)
 		}
 	case "UPDATE":
 
@@ -233,7 +259,13 @@ func (am *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sq
 			if generation > 0 {
 				writingPolicy.GenerationPolicy = aerospike.EXPECT_GEN_EQUAL
 			}
-			err = client.Put(writingPolicy, key, binMap)
+			am.removedEmptyOrExcluded(binMap)
+			if len(binMap) > 0  {
+				err = client.Put(writingPolicy, key, binMap)
+				if err != nil {
+					err = fmt.Errorf("Failed to update %v %v, %v", key, binMap, err)
+				}
+			}
 		}
 	case "DELETE":
 		if len(statement.Criteria) == 0 {
@@ -295,7 +327,7 @@ func (am *manager) readBatch(client *aerospike.Client, statement *dsc.QueryState
 	parameters := toolbox.NewSliceIterator(queryParameters)
 	keys, err := am.buildKeysForCriteria(&statement.BaseStatement, parameters)
 	if err != nil {
-			return err
+		return err
 	}
 	var records []*aerospike.Record
 	if statement.AllField {
@@ -397,20 +429,24 @@ func newConfig(dscConfig *dsc.Config) *config {
 	var keyName = keyColumnNameDefaultValue
 	if dscConfig.Has(keyColumnName) {
 		keyName = dscConfig.Get(keyColumnName)
-
 	}
-
-	fmt.Printf("Setting key column as %v\n", keyName)
 	namespace := dscConfig.Get(namespace)
 	var generationColumnNameValue string
 	if dscConfig.Has(generationColumnName) {
 		value := dscConfig.Get(generationColumnName)
 		generationColumnNameValue = value
 	}
+
+	var excluded []string
+	if dscConfig.Has(excludedColumns) {
+		excluded = strings.Split(dscConfig.Get(excludedColumns), ",")
+	}
+
 	return &config{
 		Config:               dscConfig,
 		namespace:            namespace,
 		keyColunName:         keyName,
+		excludedColumns:      excluded,
 		generationColumnName: generationColumnNameValue,
 	}
 }
