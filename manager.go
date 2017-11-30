@@ -330,9 +330,9 @@ func (am *manager) readBatch(client *aerospike.Client, statement *dsc.QueryState
 	}
 	var records []*aerospike.Record
 	if statement.AllField {
-		records, err = client.BatchGet(client.DefaultPolicy, keys)
+		records, err = client.BatchGet(client.DefaultBatchPolicy, keys)
 	} else {
-		records, err = client.BatchGet(client.DefaultPolicy, keys, statement.ColumnNames()...)
+		records, err = client.BatchGet(client.DefaultBatchPolicy, keys, statement.ColumnNames()...)
 	}
 	if err != nil {
 		return err
