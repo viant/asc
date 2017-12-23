@@ -3,10 +3,8 @@ package asc
 import (
 	"fmt"
 	"reflect"
-
 	"github.com/aerospike/aerospike-client-go"
 	"github.com/viant/dsc"
-	"github.com/viant/toolbox"
 )
 
 var clientPointer = (*aerospike.Client)(nil)
@@ -16,7 +14,7 @@ func asClient(wrapped interface{}) (*aerospike.Client, error) {
 		return result, nil
 	}
 	wrappedType := reflect.ValueOf(wrapped)
-	return nil, fmt.Errorf("Failed cast as *aerospike.Client: was %v !", wrappedType.Type())
+	return nil, fmt.Errorf("failed cast as *aerospike.Client: was %v !", wrappedType.Type())
 }
 
 type connection struct {
@@ -34,7 +32,7 @@ func (c *connection) Unwrap(target interface{}) interface{} {
 	if target == clientPointer {
 		return c.client
 	}
-	panic(fmt.Sprintf("Unsupported target type %v", target))
+	panic(fmt.Sprintf("unsupported target type %v", target))
 }
 
 type connectionProvider struct {
@@ -43,7 +41,7 @@ type connectionProvider struct {
 
 func (p *connectionProvider) NewConnection() (dsc.Connection, error) {
 	config := p.ConnectionProvider.Config()
-	client, err := aerospike.NewClient(config.Get("host"), toolbox.AsInt(config.Get("port")))
+	client, err := aerospike.NewClient(config.Get(hostKey), config.GetInt(portKey, 3000))
 	if err != nil {
 		return nil, err
 	}

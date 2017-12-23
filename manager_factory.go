@@ -14,8 +14,9 @@ func (f *managerFactory) Create(config *dsc.Config) (dsc.Manager, error) {
 	var self dsc.Manager = manager
 	super := dsc.NewAbstractManager(config, connectionProvider, self)
 	manager.AbstractManager = super
-	manager.aerospikeConfig = newConfig(config)
-	return self, nil
+	var err error
+	manager.config , err = newConfig(config)
+	return self, err
 }
 
 func (f managerFactory) CreateFromURL(url string) (dsc.Manager, error) {

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
-	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -12,22 +11,29 @@ import (
 	"github.com/aerospike/aerospike-client-go"
 	"github.com/viant/dsc"
 	"github.com/viant/toolbox"
+	"path"
+	"os"
+	uuid2 "github.com/satori/go.uuid"
+	"sync"
+	"sync/atomic"
 )
 
 const (
-	keyColumnName             = "keyColumnName"
+	keyColumnNameKey          = "keyColumnName"
+	readTimeoutMsKey          = "readTimeoutMs"
+	connectionTimeoutMsKey    = "connectionTimeoutMs"
 	keyColumnNameDefaultValue = "id"
-	generationColumnName      = "generationColumnName"
-	excludedColumns           = "excludedColumns"
-	namespace                 = "namespace"
-	connectionTimeout         = "connectionTimeout"
-	host                      = "host"
-	port                      = "port"
+	generationColumnNameKey   = "generationColumnName"
+	excludedColumnsKey        = "excludedColumns"
+	namespaceKey              = "namespace"
+	hostKey                   = "host"
+	portKey                   = "port"
 )
 
 type config struct {
 	*dsc.Config
-	keyColunName         string
+	readTimeoutMs        int
+	keyColumnName        string
 	generationColumnName string
 	namespace            string
 	excludedColumns      []string
@@ -35,7 +41,9 @@ type config struct {
 
 type manager struct {
 	*dsc.AbstractManager
-	aerospikeConfig *config
+	config     *config
+	scanPolicy *aerospike.ScanPolicy
+	batchPolicy *aerospike.BatchPolicy
 }
 
 func convertIfNeeded(source interface{}) interface{} {
@@ -55,6 +63,8 @@ func convertIfNeeded(source interface{}) interface{} {
 	}
 
 	switch sourceValue := source.(type) {
+	case *time.Time:
+		return sourceValue.String()
 	case time.Time:
 		return sourceValue.String()
 	case []byte:
@@ -93,19 +103,17 @@ func convertIfNeeded(source interface{}) interface{} {
 		return int(converted)
 
 	}
-	debug.PrintStack()
-	panic(fmt.Sprintf("Unsupproted %T %v\n", source, source))
+	panic(fmt.Sprintf("unsupported %T %v\n", source, source))
 }
 
-
-func (am *manager) buildUpdateData(statement *dsc.DmlStatement, dmlParameters []interface{}) (key *aerospike.Key, binMap aerospike.BinMap, generation uint32, err error) {
-	keyColumnName := am.aerospikeConfig.keyColunName
-	namespace := am.aerospikeConfig.namespace
+func (m *manager) buildUpdateData(statement *dsc.DmlStatement, dmlParameters []interface{}) (key *aerospike.Key, binMap aerospike.BinMap, generation uint32, err error) {
+	keyColumnName := m.config.keyColumnName
+	namespace := m.config.namespace
 	parameters := toolbox.NewSliceIterator(dmlParameters)
 
 	columnValueMap, err := statement.ColumnValueMap(parameters)
 	if err != nil {
-		return nil, nil, 0, fmt.Errorf("Failed to prepare update data: [%v] due to %v", dmlParameters, err)
+		return nil, nil, 0, fmt.Errorf("failed to prepare update data: [%v] due to %v", dmlParameters, err)
 	}
 	binMap = make(aerospike.BinMap)
 	for key, value := range columnValueMap {
@@ -120,7 +128,7 @@ func (am *manager) buildUpdateData(statement *dsc.DmlStatement, dmlParameters []
 	}
 	keyValues, err := statement.CriteriaValues(parameters)
 	if err != nil {
-		return nil, nil, 0, fmt.Errorf("Failed to prepare update criteria values: [%v] due to %v", dmlParameters, err)
+		return nil, nil, 0, fmt.Errorf("failed to prepare update criteria values: [%v] due to %v", dmlParameters, err)
 	}
 
 	key, err = aerospike.NewKey(namespace, statement.Table, convertIfNeeded(keyValues[0]))
@@ -131,10 +139,10 @@ func (am *manager) buildUpdateData(statement *dsc.DmlStatement, dmlParameters []
 	return key, binMap, generation, err
 }
 
-func (am *manager) buildInsertData(statement *dsc.DmlStatement, dmlParameters []interface{}) (key *aerospike.Key, binMap aerospike.BinMap, err error) {
+func (m *manager) buildInsertData(statement *dsc.DmlStatement, dmlParameters []interface{}) (key *aerospike.Key, binMap aerospike.BinMap, err error) {
 
-	keyColumnName := am.aerospikeConfig.keyColunName
-	namespace := am.aerospikeConfig.namespace
+	keyColumnName := m.config.keyColumnName
+	namespace := m.config.namespace
 	binMap = make(aerospike.BinMap)
 	parameters := toolbox.NewSliceIterator(dmlParameters)
 	keyValues, err := statement.ColumnValueMap(parameters)
@@ -143,7 +151,7 @@ func (am *manager) buildInsertData(statement *dsc.DmlStatement, dmlParameters []
 	}
 	for k, originalValue := range keyValues {
 		if len(k) > 14 {
-			return nil, nil, fmt.Errorf("Failed to build insert dataset column name:'%v' to long max 14 characters", k)
+			return nil, nil, fmt.Errorf("failed to build insert dataset column name:'%v' to long max 14 characters", k)
 		}
 
 		value := convertIfNeeded(originalValue)
@@ -156,13 +164,13 @@ func (am *manager) buildInsertData(statement *dsc.DmlStatement, dmlParameters []
 		binMap[k] = value
 	}
 	if key == nil {
-		return nil, nil, fmt.Errorf("Failed to build insert data: key was nil - (should not be tagged as autoincrement")
+		return nil, nil, fmt.Errorf("failed to build insert data: key was nil - (should not be tagged as autoincrement")
 	}
 	return key, binMap, err
 }
 
-func (am *manager) deleteAll(client *aerospike.Client, statement *dsc.DmlStatement) (result sql.Result, err error) {
-	recordset, err := client.ScanAll(client.DefaultScanPolicy, am.aerospikeConfig.namespace, statement.Table)
+func (m *manager) deleteAll(client *aerospike.Client, statement *dsc.DmlStatement) (result sql.Result, err error) {
+	recordset, err := client.ScanAll(client.DefaultScanPolicy, m.config.namespace, statement.Table)
 	if err != nil {
 		return nil, err
 	}
@@ -180,9 +188,9 @@ func (am *manager) deleteAll(client *aerospike.Client, statement *dsc.DmlStateme
 	return dsc.NewSQLResult(int64(i), 0), nil
 }
 
-func (am *manager) deleteSelected(client *aerospike.Client, statement *dsc.DmlStatement, dmlParameters []interface{}) (result sql.Result, err error) {
+func (m *manager) deleteSelected(client *aerospike.Client, statement *dsc.DmlStatement, dmlParameters []interface{}) (result sql.Result, err error) {
 	parameters := toolbox.NewSliceIterator(dmlParameters)
-	keys, err := am.buildKeysForCriteria(&statement.BaseStatement, parameters)
+	keys, err := m.buildKeysForCriteria(&statement.BaseStatement, parameters)
 	if err != nil {
 		return nil, err
 	}
@@ -201,22 +209,22 @@ func (am *manager) deleteSelected(client *aerospike.Client, statement *dsc.DmlSt
 	return dsc.NewSQLResult(int64(i), 0), nil
 }
 
-func (am *manager) removedEmptyOrExcluded(binMap aerospike.BinMap) {
+func (m *manager) removedEmptyOrExcluded(binMap aerospike.BinMap) {
 
-	for k,v :=range binMap {
+	for k, v := range binMap {
 		if v == nil {
 			delete(binMap, k)
 		}
 	}
-	if len(am.aerospikeConfig.excludedColumns)  == 0 {
+	if len(m.config.excludedColumns) == 0 {
 		return
 	}
-	for _, column := range am.aerospikeConfig.excludedColumns {
+	for _, column := range m.config.excludedColumns {
 		delete(binMap, column)
 	}
 }
 
-func (am *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sqlParameters []interface{}) (result sql.Result, err error) {
+func (m *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sqlParameters []interface{}) (result sql.Result, err error) {
 	client, err := asClient(connection.Unwrap(clientPointer))
 	if err != nil {
 		return nil, err
@@ -224,7 +232,7 @@ func (am *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sq
 	parser := dsc.NewDmlParser()
 	statement, err := parser.Parse(sql)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to parse %v due to %v", sql, err)
+		return nil, fmt.Errorf("failed to parse %v due to %v", sql, err)
 	}
 
 	var key *aerospike.Key
@@ -236,41 +244,41 @@ func (am *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sq
 
 	switch statement.Type {
 	case "INSERT":
-		if am.aerospikeConfig.generationColumnName != "" {
+		if m.config.generationColumnName != "" {
 			writingPolicy.GenerationPolicy = aerospike.EXPECT_GEN_EQUAL
 		}
-		key, binMap, err = am.buildInsertData(statement, sqlParameters)
-		am.removedEmptyOrExcluded(binMap)
+		key, binMap, err = m.buildInsertData(statement, sqlParameters)
+		m.removedEmptyOrExcluded(binMap)
 		if err == nil {
 			if len(binMap) > 0 {
 				err = client.Put(writingPolicy, key, binMap)
 			}
 		}
 		if err != nil {
-			err = fmt.Errorf("Failed to insert %v %v, %v", key, binMap, err)
+			err = fmt.Errorf("failed to insert %v %v, %v", key, binMap, err)
 		}
 	case "UPDATE":
 
-		key, binMap, generation, err = am.buildUpdateData(statement, sqlParameters)
+		key, binMap, generation, err = m.buildUpdateData(statement, sqlParameters)
 
 		if err == nil {
 			writingPolicy.Generation = generation
 			if generation > 0 {
 				writingPolicy.GenerationPolicy = aerospike.EXPECT_GEN_EQUAL
 			}
-			am.removedEmptyOrExcluded(binMap)
-			if len(binMap) > 0  {
+			m.removedEmptyOrExcluded(binMap)
+			if len(binMap) > 0 {
 				err = client.Put(writingPolicy, key, binMap)
 				if err != nil {
-					err = fmt.Errorf("Failed to update %v %v, %v", key, binMap, err)
+					err = fmt.Errorf("failed to update %v %v, %v", key, binMap, err)
 				}
 			}
 		}
 	case "DELETE":
 		if len(statement.Criteria) == 0 {
-			return am.deleteAll(client, statement)
+			return m.deleteAll(client, statement)
 		}
-		return am.deleteSelected(client, statement, sqlParameters)
+		return m.deleteSelected(client, statement, sqlParameters)
 
 	}
 	if err != nil {
@@ -279,28 +287,151 @@ func (am *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sq
 	return dsc.NewSQLResult(1, 0), nil
 }
 
-func (am *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
+func (m *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	var err error
 	var recordset *aerospike.Recordset
+
+	if m.config.GetBoolean("optimizeLargeScan", false) {
+		return m.scanAllWithKeys(client, statement, readingHandler, statement.ColumnNames()...)
+	}
 	if statement.AllField {
-		recordset, err = client.ScanAll(client.DefaultScanPolicy, am.aerospikeConfig.namespace, statement.Table)
+		recordset, err = client.ScanAll(client.DefaultScanPolicy, m.config.namespace, statement.Table)
 	} else {
-		recordset, err = client.ScanAll(client.DefaultScanPolicy, am.aerospikeConfig.namespace, statement.Table, statement.ColumnNames()...)
+		recordset, err = client.ScanAll(client.DefaultScanPolicy, m.config.namespace, statement.Table, statement.ColumnNames()...)
 	}
 	if err != nil {
 		return err
 	}
 	defer recordset.Close()
-	return am.processRecordset(recordset, statement, readingHandler)
+	return m.processRecordset(recordset, statement, readingHandler)
 }
 
-func (am *manager) buildKeysForCriteria(statement *dsc.BaseStatement, parameters toolbox.Iterator) ([]*aerospike.Key, error) {
+func (m *manager) getConfigValueAsInt(configKey string, defaultValue int) int {
+	if ! m.Config().Has(configKey) {
+		return defaultValue
+	}
+	return toolbox.AsInt(m.Config().Get(configKey))
+}
+
+func (m *manager) getConfigValueAsFloat(configKey string, defaultValue float64) float64 {
+	if ! m.Config().Has(configKey) {
+		return defaultValue
+	}
+	return toolbox.AsFloat(m.Config().Get(configKey))
+}
+
+type groupControl struct {
+	err        error
+	terminated int32
+}
+
+func (m *manager) scanNodeKeys(waitGroup *sync.WaitGroup, filename string, client *aerospike.Client, node *aerospike.Node, scanPolicy *aerospike.ScanPolicy, namespace, table string, batchControl *groupControl) error {
+	recordSet, err := client.ScanNode(scanPolicy, node, namespace, table)
+	if err != nil {
+		return err
+	}
+	var readTimeout = m.Config().GetDuration("readTimeoutMs", time.Millisecond, 15*time.Second)
+	var retries = m.Config().GetInt("maxRetries", 2)
+	var timeout = readTimeout * time.Duration(retries*2)
+
+	var errors = recordSet.Errors
+	var records = recordSet.Records
+	var record *aerospike.Record
+	writer, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	var count = 0
+	go func() {
+		defer writer.Close()
+
+		defer func() {
+			if err != nil {
+				batchControl.err = fmt.Errorf("unable to get keys from %v, %v", node.String(), err)
+				atomic.StoreInt32(&batchControl.terminated, 1)
+			}
+			waitGroup.Done()
+		}()
+		for ; recordSet.IsActive(); {
+			select {
+			case record = <-records:
+				if record != nil && record.Key != nil {
+					_, err = writer.Write(record.Key.Digest())
+					if err != nil {
+						return
+					}
+					count++
+				}
+			case err = <-errors:
+				return
+			case <-time.After(timeout):
+				err = fmt.Errorf("read timeout")
+				return
+			}
+			if atomic.LoadInt32(&batchControl.terminated) == 1 {
+				return
+			}
+		}
+	}()
+
+	return err
+}
+
+func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error), binNames ... string) error {
+	scanPolicy := m.getScanKeyPolicy()
+	var uuid = uuid2.NewV1().String()
+	var baseDirectory = path.Join(m.Config().GetString("scanKeysBaseDirectory", os.Getenv("TMPDIR")), uuid)
+	if err := toolbox.CreateDirIfNotExist(baseDirectory); err != nil {
+		return fmt.Errorf("failed to scan keys - unable to create scanKeysBaseDirectory: %v, %v", baseDirectory, err)
+	}
+	var err error
+	var nodes = client.GetNodes()
+	waitGroup := &sync.WaitGroup{}
+	waitGroup.Add(len(nodes))
+	var nodeKeysFilenames = make([]string, 0)
+	var control = &groupControl{}
+	for _, node := range nodes {
+		var name = strings.Replace(node.String(), ":", "-", len(node.String())) + ".key"
+		var nodeKeyFilename = path.Join(baseDirectory, name)
+		nodeKeysFilenames = append(nodeKeysFilenames, nodeKeyFilename)
+		err = m.scanNodeKeys(waitGroup, nodeKeyFilename, client, node, scanPolicy, m.config.namespace, statement.Table, control)
+		if err != nil {
+			atomic.StoreInt32(&control.terminated, 1)
+			break;
+		}
+	}
+	defer toolbox.RemoveFileIfExist(append(nodeKeysFilenames, baseDirectory)...)
+	waitGroup.Wait()
+	if control.err != nil {
+		err = control.err
+	}
+	if err != nil {
+		return fmt.Errorf("failed to scan keys: %v", err)
+	}
+	batchPolicy := m.getBatchPolicy()
+	var batchSize = m.config.GetInt("batchSize", 256)
+	iterator := NewBatchIterator(client, batchPolicy, batchSize, m.config.namespace, statement.Table, nodeKeysFilenames, binNames...)
+	for iterator.HasNext() {
+		var batch = &Batch{}
+		err = iterator.Next(&batch)
+		if err != nil {
+			return err
+		}
+		err = m.processRecords(batch.Records, batch.Keys, statement, readingHandler)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *manager) buildKeysForCriteria(statement *dsc.BaseStatement, parameters toolbox.Iterator) ([]*aerospike.Key, error) {
 	var result = make([]*aerospike.Key, 0)
 	criteria := statement.Criteria[0]
-	namespace := am.aerospikeConfig.namespace
-	keyColumnName := am.aerospikeConfig.keyColunName
+	namespace := m.config.namespace
+	keyColumnName := m.config.keyColumnName
 	if criteria.LeftOperand != keyColumnName {
-		return nil, fmt.Errorf("Only criteria on key column: '%v' is supproted: %v", keyColumnName, criteria.LeftOperand)
+		return nil, fmt.Errorf("only criteria on key column: '%v' is supproted: %v", keyColumnName, criteria.LeftOperand)
 	}
 	criteriaValues, err := statement.CriteriaValues(parameters)
 	if err != nil {
@@ -322,57 +453,63 @@ func (am *manager) buildKeysForCriteria(statement *dsc.BaseStatement, parameters
 	return result, nil
 }
 
-func (am *manager) readBatch(client *aerospike.Client, statement *dsc.QueryStatement, queryParameters []interface{}, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
+func (m *manager) readBatch(client *aerospike.Client, statement *dsc.QueryStatement, queryParameters []interface{}, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	parameters := toolbox.NewSliceIterator(queryParameters)
-	keys, err := am.buildKeysForCriteria(&statement.BaseStatement, parameters)
+	keys, err := m.buildKeysForCriteria(&statement.BaseStatement, parameters)
 	if err != nil {
 		return err
 	}
+	var batchPolicy = m.getBatchPolicy()
 	var records []*aerospike.Record
 	if statement.AllField {
-		records, err = client.BatchGet(client.DefaultBatchPolicy, keys)
+		records, err = client.BatchGet(batchPolicy , keys)
 	} else {
-		records, err = client.BatchGet(client.DefaultBatchPolicy, keys, statement.ColumnNames()...)
+		records, err = client.BatchGet(batchPolicy , keys, statement.ColumnNames()...)
 	}
 	if err != nil {
 		return err
 	}
-	err = am.processRecords(records, keys, statement, readingHandler)
+
+	err = m.processRecords(records, keys, statement, readingHandler)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (am *manager) processRecord(key *aerospike.Key, record *aerospike.Record, aeroSpikeScanner *scanner, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) (toContinue bool, err error) {
-	keyColumnName := am.aerospikeConfig.keyColunName
-	generationColumnName := am.aerospikeConfig.generationColumnName
+func (m *manager) processRecord(key *aerospike.Key, record *aerospike.Record, aeroSpikeScanner *scanner, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) (toContinue bool, err error) {
+	keyColumnName := m.config.keyColumnName
+	generationColumnName := m.config.generationColumnName
 	var bins = record.Bins
+
 	if generationColumnName != "" {
 		bins[generationColumnName] = record.Generation
 	}
-	if _, found := bins[keyColumnName]; !found {
-		bins[keyColumnName] = key.Value()
+	if _, found := bins[keyColumnName]; !found && key != nil && key.Value() != nil{
+		bins[keyColumnName] = key.Value().String()
 	}
 	aeroSpikeScanner.Values = bins
-	var scanner dsc.Scanner = aeroSpikeScanner
 	if err != nil {
 		return false, err
 	}
-	return readingHandler(scanner)
+	return readingHandler(aeroSpikeScanner)
 }
 
-func (am *manager) processRecords(records []*aerospike.Record, keys []*aerospike.Key, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
+func (m *manager) processRecords(records []*aerospike.Record, keys []*aerospike.Key, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	if len(records) == 0 {
 		return nil
 	}
 	for i, record := range records {
 		if record != nil {
 			columns := toolbox.MapKeysToStringSlice(record.Bins)
-			aeroSpikeScanner := newScanner(statement, am.Config(), columns)
-			toContinue, err := am.processRecord(keys[i], record, aeroSpikeScanner, readingHandler)
+			scanner := newScanner(statement, m.Config(), columns)
+			var key = keys[i]
+			if record.Key != nil {
+				key = record.Key
+			}
+			toContinue, err := m.processRecord(key, record, scanner, readingHandler)
 			if err != nil {
-				return fmt.Errorf("Failed to fetch full scan data on statement %v, due to\n\t%v", statement.SQL, err)
+				return fmt.Errorf("failed to read data %v, due to\n\t%v", statement.SQL, err)
 			}
 			if !toContinue {
 				return nil
@@ -382,30 +519,50 @@ func (am *manager) processRecords(records []*aerospike.Record, keys []*aerospike
 	return nil
 }
 
-func (am *manager) processRecordset(recordset *aerospike.Recordset, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
-	for record := range recordset.Results() {
-
-		if record.Err != nil {
-			return fmt.Errorf("Failed to fetch full scan data on statement %v, due to\n\t%v", statement.SQL, record.Err)
+func (m *manager) processRecordset(recordset *aerospike.Recordset, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
+	var records = recordset.Records;
+	var errors = recordset.Errors
+	var record *aerospike.Record
+	var keyColumn = m.config.keyColumnName;
+	var readTimeDuration = time.Duration(m.config.readTimeoutMs) * time.Millisecond
+	for ; ; {
+		if ! recordset.IsActive() {
+			return nil
 		}
-		if record.Record != nil {
-			columns := toolbox.MapKeysToStringSlice(record.Record.Bins)
-			aeroSpikeScanner := newScanner(statement, am.Config(), columns)
-
-			toContinue, err := am.processRecord(record.Record.Key, record.Record, aeroSpikeScanner, readingHandler)
+		select {
+		case record = <-records:
+		case err := <-errors:
 			if err != nil {
-				return fmt.Errorf("Failed to fetch full scan data on statement %v, due to\n\t%v", statement.SQL, err)
+				return err
+			}
+		case <-time.After(readTimeDuration):
+			return fmt.Errorf("read timeout")
+		}
+		if record != nil {
+			var aMap map[string]interface{}
+			if len(record.Bins) == 0 {
+				aMap = make(map[string]interface{})
+			} else {
+				aMap = map[string]interface{}(record.Bins)
+			}
+			columns := toolbox.MapKeysToStringSlice(aMap)
+			if pk, ok := aMap[keyColumn]; ! ok || pk == nil { //add PK to record bin
+				aMap[keyColumn] = record.Key.Value()
+			}
+			aeroSpikeScanner := newScanner(statement, m.Config(), columns)
+			toContinue, err := m.processRecord(record.Key, record, aeroSpikeScanner, readingHandler)
+			if err != nil {
+				return fmt.Errorf("failed to fetch full scan data on statement %v, due to\n\t%v", statement.SQL, err)
 			}
 			if !toContinue {
 				return nil
 			}
 		}
-
 	}
 	return nil
 }
 
-func (am *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sql string, args []interface{}, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
+func (m *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sql string, args []interface{}, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	client, err := asClient(connection.Unwrap(clientPointer))
 	if err != nil {
 		return err
@@ -413,39 +570,83 @@ func (am *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, s
 	parser := dsc.NewQueryParser()
 	statement, err := parser.Parse(sql)
 	if err != nil {
-		return fmt.Errorf("Failed to parse statement %v, %v", sql, err)
+		return fmt.Errorf("failed to parse statement %v, %v", sql, err)
 	}
 	if statement.Criteria == nil || len(statement.Criteria) == 0 {
-		return am.scanAll(client, statement, readingHandler)
+		return m.scanAll(client, statement, readingHandler)
 	} else if len(statement.Criteria) > 1 {
-		return fmt.Errorf("Only single crieria is allowed %v", sql)
+		return fmt.Errorf("only single crieria is allowed %v", sql)
 	} else {
-		return am.readBatch(client, statement, args, readingHandler)
+		return m.readBatch(client, statement, args, readingHandler)
 	}
 }
 
-func newConfig(dscConfig *dsc.Config) *config {
-	var keyName = keyColumnNameDefaultValue
-	if dscConfig.Has(keyColumnName) {
-		keyName = dscConfig.Get(keyColumnName)
+
+
+func (m *manager) applyPolicySettings(policy *aerospike.BasePolicy) {
+	policy.MaxRetries = m.Config().GetInt("maxRetries", 10)
+	policy.SleepBetweenRetries = m.Config().GetDuration("sleepBetweenRetriesMs", time.Millisecond, 100*time.Millisecond)
+	policy.Timeout = m.Config().GetDuration("readTimeoutMs", time.Millisecond, 0)
+	policy.SocketTimeout = m.Config().GetDuration("connectionTimeoutMsKey", time.Millisecond, 2*time.Minute)
+	policy.SleepMultiplier = m.Config().GetFloat("sleepMultiplier", 3.0)
+
+}
+
+func (m *manager) getScanKeyPolicy() *aerospike.ScanPolicy {
+	if m.scanPolicy != nil {
+		return m.scanPolicy
 	}
-	namespace := dscConfig.Get(namespace)
+	result := aerospike.NewScanPolicy()
+	result.IncludeBinData = false
+	result.ScanPercent = m.Config().GetInt("scanPercent", 100)
+	m.applyPolicySettings(result.BasePolicy)
+	m.scanPolicy = result
+	return result
+}
+
+
+
+func (m *manager) getBatchPolicy() *aerospike.BatchPolicy {
+	if m.batchPolicy != nil {
+		return m.batchPolicy
+	}
+	result := aerospike.NewBatchPolicy()
+	m.applyPolicySettings(&result.BasePolicy)
+	result.ConcurrentNodes = 2
+	m.batchPolicy = result
+	return result
+}
+
+
+
+func newConfig(dscConfig *dsc.Config) (*config, error) {
+	var keyColumnName = dscConfig.GetString(keyColumnNameKey, keyColumnNameDefaultValue)
+	namespace := dscConfig.Get(namespaceKey)
+	if namespace == "" {
+		return nil, fmt.Errorf("namespaceKey was empty")
+	}
+
 	var generationColumnNameValue string
-	if dscConfig.Has(generationColumnName) {
-		value := dscConfig.Get(generationColumnName)
+	if dscConfig.Has(generationColumnNameKey) {
+		value := dscConfig.Get(generationColumnNameKey)
 		generationColumnNameValue = value
 	}
 
 	var excluded []string
-	if dscConfig.Has(excludedColumns) {
-		excluded = strings.Split(dscConfig.Get(excludedColumns), ",")
+	if dscConfig.Has(excludedColumnsKey) {
+		excluded = strings.Split(dscConfig.Get(excludedColumnsKey), ",")
 	}
 
+	var readTimeoutMs = 1000 * 60
+	if dscConfig.Has(readTimeoutMsKey) {
+		readTimeoutMs = toolbox.AsInt(dscConfig.Get(readTimeoutMsKey))
+	}
 	return &config{
 		Config:               dscConfig,
 		namespace:            namespace,
-		keyColunName:         keyName,
+		readTimeoutMs:        readTimeoutMs,
+		keyColumnName:        keyColumnName,
 		excludedColumns:      excluded,
 		generationColumnName: generationColumnNameValue,
-	}
+	}, nil
 }

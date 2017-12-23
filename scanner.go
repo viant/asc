@@ -19,6 +19,18 @@ func (s *scanner) Columns() ([]string, error) {
 
 func (s *scanner) Scan(destinations ...interface{}) error {
 	var columns, _ = s.Columns()
+
+	if len(destinations) == 1 {
+		if toolbox.IsMap(destinations[0]) {
+			aMap := toolbox.AsMap(destinations[0])
+			for k, v := range s.Values {
+				aMap[k] = v
+			}
+		}
+		return nil
+	}
+
+
 	for i, dest := range destinations {
 		if dest == nil {
 			continue

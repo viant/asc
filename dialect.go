@@ -16,14 +16,14 @@ var defaulConnectionTimeout = 500 * time.Millisecond
 type dialect struct{ dsc.DatastoreDialect }
 
 func getConnection(config *dsc.Config) (*aerospike.Connection, error) {
-	if !config.Has(host) || !config.Has(port) {
-		return nil, errors.New("Port or host are not poresent")
+	if !config.Has(hostKey) || !config.Has(portKey) {
+		return nil, errors.New("Port or hostKey are not poresent")
 	}
-	hostPort := config.Get(host) + ":" + config.Get(port)
+	hostPort := config.Get(hostKey) + ":" + config.Get(portKey)
 	connectionTimeoutInMs := defaulConnectionTimeout
 
-	if config.Has(connectionTimeout) {
-		timeout := toolbox.AsInt(config.Get(connectionTimeout))
+	if config.Has(connectionTimeoutMsKey) {
+		timeout := toolbox.AsInt(config.Get(connectionTimeoutMsKey))
 		connectionTimeoutInMs = time.Duration(timeout) * time.Millisecond
 	}
 	return aerospike.NewConnection(hostPort, connectionTimeoutInMs)
@@ -36,8 +36,8 @@ func getConnection(config *dsc.Config) (*aerospike.Connection, error) {
 func (d dialect) GetKeyName(manager dsc.Manager, datastore, table string) string {
 	config := manager.Config()
 	var keyName = keyColumnNameDefaultValue
-	if config.Has(keyColumnName) {
-		keyName = config.Get(keyColumnName)
+	if config.Has(keyColumnNameKey) {
+		keyName = config.Get(keyColumnNameKey)
 	}
 	return keyName
 }
@@ -55,7 +55,7 @@ func (d dialect) SendAdminCommand(manager dsc.Manager, command string) (map[stri
 }
 
 func (d dialect) DropTable(manager dsc.Manager, datastore string, table string) error {
-	//result, err := d.SendAdminCommand(manager ,fmt.Sprintf("set-config:context=namespace;id=%v;set=%v;set-delete=true", datastore, table))
+	//result, err := d.SendAdminCommand(manager ,fmt.Sprintf("set-config:context=namespaceKey;id=%v;set=%v;set-delete=true", datastore, table))
 	_, err := manager.Execute("DELETE FROM " + table)
 	if err != nil {
 		return err
@@ -71,12 +71,12 @@ func (d dialect) GetDatastores(manager dsc.Manager) ([]string, error) {
 	if value, found := result["namespaces"]; found {
 		return strings.Split(value, ";"), nil
 	}
-	return nil, fmt.Errorf("Failed to lookup datastores :%v", result)
+	return nil, fmt.Errorf("failed to lookup datastores :%v", result)
 }
 
 func (d dialect) GetCurrentDatastore(manager dsc.Manager) (string, error) {
 	config := manager.Config()
-	return config.Get("namespace"), nil
+	return config.Get("namespaceKey"), nil
 }
 
 func (d dialect) GetTables(manager dsc.Manager, datastore string) ([]string, error) {
@@ -98,7 +98,7 @@ func (d dialect) GetTables(manager dsc.Manager, datastore string) ([]string, err
 		}
 		return tables, nil
 	}
-	return nil, fmt.Errorf("Failed to get tables %v", result)
+	return nil, fmt.Errorf("failed to get tables %v", result)
 }
 
 func (d dialect) CanPersistBatch() bool {
