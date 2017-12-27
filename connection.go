@@ -2,9 +2,9 @@ package asc
 
 import (
 	"fmt"
-	"reflect"
 	"github.com/aerospike/aerospike-client-go"
 	"github.com/viant/dsc"
+	"reflect"
 )
 
 var clientPointer = (*aerospike.Client)(nil)

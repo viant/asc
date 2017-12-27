@@ -1,11 +1,11 @@
 package asc_test
 
 import (
-	"testing"
-	"github.com/viant/asc"
 	"bytes"
 	"github.com/aerospike/aerospike-client-go"
 	"github.com/stretchr/testify/assert"
+	"github.com/viant/asc"
+	"testing"
 )
 
 func Test_WriteKey(t *testing.T) {

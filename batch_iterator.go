@@ -1,12 +1,12 @@
 package asc
 
 import (
-	"os"
-	"sync/atomic"
-	"sync"
+	"fmt"
 	"github.com/aerospike/aerospike-client-go"
 	"github.com/viant/toolbox"
-	"fmt"
+	"os"
+	"sync"
+	"sync/atomic"
 )
 
 //BatchIterator represents a helper iterator for full scan, in this case keys were scanned first from each node separately
@@ -49,7 +49,7 @@ func (i *BatchIterator) scanKeys() ([]*aerospike.Key, bool) {
 	for j := 0; j < i.batchSize; j++ {
 
 		var position = int(atomic.LoadInt32(&i.filePosition))
-		if  position >= int(i.fileInfo.Size()) {
+		if position >= int(i.fileInfo.Size()) {
 			i.file.Close()
 			atomic.StoreInt32(&i.filePosition, 0)
 			i.file = nil
@@ -75,32 +75,30 @@ func (i *BatchIterator) readInBatch(keys []*aerospike.Key) bool {
 	return i.err == nil
 }
 
-
-
 //HasNext check is has more record, if needed it will scan keys from files to batch corresponding records
 func (i *BatchIterator) HasNext() bool {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
-	var iterationCont = 1000; //some high number
+	var iterationCont = 1000 //some high number
 
 	for k := 0; k < iterationCont; k++ {
 		var index = int(atomic.LoadInt32(&i.fileIndex))
 		if index >= len(i.fileNames) {
 			return false
 		}
-		if ! i.initialiseScannerIfNeeded(i.fileNames[index]) {
+		if !i.initialiseScannerIfNeeded(i.fileNames[index]) {
 			return true //to catch error
 		}
 
 		keys, shallContinue := i.scanKeys()
-		if ! shallContinue {
+		if !shallContinue {
 			return true //to catch error
 		}
 
 		if len(keys) == 0 {
 			continue
 		}
-		if ! i.readInBatch(keys) {
+		if !i.readInBatch(keys) {
 			return true //to catch error
 		}
 		if len(i.batch.Records) == 0 {
@@ -128,7 +126,7 @@ func (i *BatchIterator) Next(target interface{}) error {
 	return fmt.Errorf("unsupporter target type %T, expected %T or %T", target, i.batch, &i.batch)
 }
 
-func NewBatchIterator(client *aerospike.Client, batchPolicy *aerospike.BatchPolicy, batchSize int, namespace, table string, fileNames []string, binNames ... string) *BatchIterator {
+func NewBatchIterator(client *aerospike.Client, batchPolicy *aerospike.BatchPolicy, batchSize int, namespace, table string, fileNames []string, binNames ...string) *BatchIterator {
 	return &BatchIterator{
 		mutex:       &sync.RWMutex{},
 		client:      client,

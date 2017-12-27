@@ -1,11 +1,11 @@
 package asc
 
 import (
-	"github.com/aerospike/aerospike-client-go"
-	"io"
 	"encoding/binary"
 	"fmt"
+	"github.com/aerospike/aerospike-client-go"
 	"github.com/viant/toolbox"
+	"io"
 )
 
 const (
@@ -96,7 +96,7 @@ func ReadKey(reader io.Reader, namespace, setName string) (*aerospike.Key, int, 
 			return nil, 0, err
 		}
 		keyValue := binary.LittleEndian.Uint64(payload)
-		key, err :=  aerospike.NewKey(namespace, setName, int(keyValue))
+		key, err := aerospike.NewKey(namespace, setName, int(keyValue))
 		return key, 9, err
 	}
 	return nil, 0, fmt.Errorf("unsupported key type: %v", keyTypeInt)

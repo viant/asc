@@ -30,7 +30,6 @@ func (s *scanner) Scan(destinations ...interface{}) error {
 		return nil
 	}
 
-
 	for i, dest := range destinations {
 		if dest == nil {
 			continue

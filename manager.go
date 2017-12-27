@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/aerospike/aerospike-client-go"
+	uuid2 "github.com/satori/go.uuid"
 	"github.com/viant/dsc"
 	"github.com/viant/toolbox"
-	"path"
 	"os"
-	uuid2 "github.com/satori/go.uuid"
+	"path"
 	"sync"
 	"sync/atomic"
 )
@@ -308,14 +308,14 @@ func (m *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStatemen
 }
 
 func (m *manager) getConfigValueAsInt(configKey string, defaultValue int) int {
-	if ! m.Config().Has(configKey) {
+	if !m.Config().Has(configKey) {
 		return defaultValue
 	}
 	return toolbox.AsInt(m.Config().Get(configKey))
 }
 
 func (m *manager) getConfigValueAsFloat(configKey string, defaultValue float64) float64 {
-	if ! m.Config().Has(configKey) {
+	if !m.Config().Has(configKey) {
 		return defaultValue
 	}
 	return toolbox.AsFloat(m.Config().Get(configKey))
@@ -353,7 +353,7 @@ func (m *manager) scanNodeKeys(waitGroup *sync.WaitGroup, filename string, clien
 			}
 			waitGroup.Done()
 		}()
-		for ; recordSet.IsActive(); {
+		for recordSet.IsActive() {
 			select {
 			case record = <-records:
 				if record != nil && record.Key != nil {
@@ -378,7 +378,7 @@ func (m *manager) scanNodeKeys(waitGroup *sync.WaitGroup, filename string, clien
 	return err
 }
 
-func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error), binNames ... string) error {
+func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error), binNames ...string) error {
 
 	scanPolicy := m.getScanKeyPolicy()
 	var uuid = uuid2.NewV1().String()
@@ -399,7 +399,7 @@ func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.Query
 		err = m.scanNodeKeys(waitGroup, nodeKeyFilename, client, node, scanPolicy, m.config.namespace, statement.Table, control)
 		if err != nil {
 			atomic.StoreInt32(&control.terminated, 1)
-			break;
+			break
 		}
 	}
 	defer toolbox.RemoveFileIfExist(append(nodeKeysFilenames, baseDirectory)...)
@@ -522,13 +522,13 @@ func (m *manager) processRecords(records []*aerospike.Record, keys []*aerospike.
 }
 
 func (m *manager) processRecordset(recordset *aerospike.Recordset, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
-	var records = recordset.Records;
+	var records = recordset.Records
 	var errors = recordset.Errors
 	var record *aerospike.Record
-	var keyColumn = m.config.keyColumnName;
+	var keyColumn = m.config.keyColumnName
 	var readTimeDuration = time.Duration(m.config.readTimeoutMs) * time.Millisecond
-	for ; ; {
-		if ! recordset.IsActive() {
+	for {
+		if !recordset.IsActive() {
 			return nil
 		}
 		select {
@@ -548,7 +548,7 @@ func (m *manager) processRecordset(recordset *aerospike.Recordset, statement *ds
 				aMap = map[string]interface{}(record.Bins)
 			}
 			columns := toolbox.MapKeysToStringSlice(aMap)
-			if pk, ok := aMap[keyColumn]; ! ok || pk == nil { //add PK to record bin
+			if pk, ok := aMap[keyColumn]; !ok || pk == nil { //add PK to record bin
 				aMap[keyColumn] = record.Key.Value()
 			}
 			aeroSpikeScanner := newScanner(statement, m.Config(), columns)

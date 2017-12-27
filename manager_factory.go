@@ -15,7 +15,7 @@ func (f *managerFactory) Create(config *dsc.Config) (dsc.Manager, error) {
 	super := dsc.NewAbstractManager(config, connectionProvider, self)
 	manager.AbstractManager = super
 	var err error
-	manager.config , err = newConfig(config)
+	manager.config, err = newConfig(config)
 	return self, err
 }
 
