@@ -31,7 +31,7 @@ func getConnection(config *dsc.Config) (*aerospike.Connection, error) {
 
 //GetKeyName returns a name of column name that is a key, or coma separated list if complex key
 
-func (d dialect) GetKeyName(manager dsc.Manager, datastore, table string) string {
+func (d *dialect) GetKeyName(manager dsc.Manager, datastore, table string) string {
 	config := manager.Config()
 	var keyName = keyColumnNameDefaultValue
 	if config.Has(keyColumnNameKey) {
@@ -40,7 +40,7 @@ func (d dialect) GetKeyName(manager dsc.Manager, datastore, table string) string
 	return keyName
 }
 
-func (d dialect) SendAdminCommand(manager dsc.Manager, command string) (map[string]string, error) {
+func (d *dialect) SendAdminCommand(manager dsc.Manager, command string) (map[string]string, error) {
 	connection, err := getConnection(manager.Config())
 	if err != nil {
 		return nil, err
@@ -49,7 +49,36 @@ func (d dialect) SendAdminCommand(manager dsc.Manager, command string) (map[stri
 	return aerospike.RequestInfo(connection, command)
 }
 
-func (d dialect) DropTable(manager dsc.Manager, datastore string, table string) error {
+func (d *dialect) GetColumns(manager dsc.Manager, datastore, table string) []string {
+	var result = make([]string, 0)
+	command := fmt.Sprintf("bins/%v", datastore)
+	response, err := d.SendAdminCommand(manager, command)
+
+	if err != nil {
+		return []string{}
+	}
+	//
+	if encodedBins, ok:= response[command];ok {
+		encodedFragments := strings.Split(encodedBins, ",")
+
+		for _, fragment:= range encodedFragments {
+			if strings.HasPrefix(fragment, "bin_names") {
+				var binCount = toolbox.AsInt(string(fragment[10:]))
+				if binCount > 0 {
+					for j := 0;j<binCount;j++{
+						result = append(result, encodedFragments[len(encodedFragments)-(j+1)])
+					}
+					break;
+				}
+			}
+		}
+	}
+	return result
+}
+
+
+
+func (d *dialect) DropTable(manager dsc.Manager, datastore string, table string) error {
 	//result, err := d.SendAdminCommand(manager ,fmt.Sprintf("set-config:context=namespaceKey;id=%v;set=%v;set-delete=true", datastore, table))
 	_, err := manager.Execute("DELETE FROM " + table)
 	if err != nil {
@@ -58,23 +87,23 @@ func (d dialect) DropTable(manager dsc.Manager, datastore string, table string) 
 	return nil
 }
 
-func (d dialect) GetDatastores(manager dsc.Manager) ([]string, error) {
-	result, err := d.SendAdminCommand(manager, "namespaces")
+func (d *dialect) GetDatastores(manager dsc.Manager) ([]string, error) {
+	result, err := d.SendAdminCommand(manager, namespaceKey)
 	if err != nil {
 		return nil, err
 	}
-	if value, found := result["namespaces"]; found {
+	if value, found := result[namespaceKey]; found {
 		return strings.Split(value, ";"), nil
 	}
 	return nil, fmt.Errorf("failed to lookup datastores :%v", result)
 }
 
-func (d dialect) GetCurrentDatastore(manager dsc.Manager) (string, error) {
+func (d *dialect) GetCurrentDatastore(manager dsc.Manager) (string, error) {
 	config := manager.Config()
-	return config.Get("namespaceKey"), nil
+	return config.Get(namespaceKey), nil
 }
 
-func (d dialect) GetTables(manager dsc.Manager, datastore string) ([]string, error) {
+func (d *dialect) GetTables(manager dsc.Manager, datastore string) ([]string, error) {
 	command := fmt.Sprintf("sets/%v", datastore)
 	result, err := d.SendAdminCommand(manager, command)
 	if err != nil {
@@ -96,7 +125,7 @@ func (d dialect) GetTables(manager dsc.Manager, datastore string) ([]string, err
 	return nil, fmt.Errorf("failed to get tables %v", result)
 }
 
-func (d dialect) CanPersistBatch() bool {
+func (d *dialect) CanPersistBatch() bool {
 	return true
 }
 
