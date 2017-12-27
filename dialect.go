@@ -33,9 +33,9 @@ func getConnection(config *dsc.Config) (*aerospike.Connection, error) {
 
 func (d *dialect) GetKeyName(manager dsc.Manager, datastore, table string) string {
 	config := manager.Config()
-	var keyName = keyColumnNameDefaultValue
-	if config.Has(keyColumnNameKey) {
-		keyName = config.Get(keyColumnNameKey)
+	var keyName = pkColumnNameDefaultValue
+	if config.Has(pkColumnNameKey) {
+		keyName = config.Get(pkColumnNameKey)
 	}
 	return keyName
 }
@@ -58,17 +58,17 @@ func (d *dialect) GetColumns(manager dsc.Manager, datastore, table string) []str
 		return []string{}
 	}
 	//
-	if encodedBins, ok:= response[command];ok {
+	if encodedBins, ok := response[command]; ok {
 		encodedFragments := strings.Split(encodedBins, ",")
 
-		for _, fragment:= range encodedFragments {
+		for _, fragment := range encodedFragments {
 			if strings.HasPrefix(fragment, "bin_names") {
 				var binCount = toolbox.AsInt(string(fragment[10:]))
 				if binCount > 0 {
-					for j := 0;j<binCount;j++{
+					for j := 0; j < binCount; j++ {
 						result = append(result, encodedFragments[len(encodedFragments)-(j+1)])
 					}
-					break;
+					break
 				}
 			}
 		}
@@ -76,10 +76,7 @@ func (d *dialect) GetColumns(manager dsc.Manager, datastore, table string) []str
 	return result
 }
 
-
-
 func (d *dialect) DropTable(manager dsc.Manager, datastore string, table string) error {
-	//result, err := d.SendAdminCommand(manager ,fmt.Sprintf("set-config:context=namespaceKey;id=%v;set=%v;set-delete=true", datastore, table))
 	_, err := manager.Execute("DELETE FROM " + table)
 	if err != nil {
 		return err

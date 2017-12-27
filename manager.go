@@ -19,17 +19,18 @@ import (
 )
 
 const (
-	keyColumnNameKey          = "keyColumnName"
-	readTimeoutMsKey          = "readTimeoutMs"
-	connectionTimeoutMsKey    = "connectionTimeoutMs"
-	optimizeLargeScanKey      = "optimizeLargeScan"
-	keyColumnNameDefaultValue = "id"
-	generationColumnNameKey   = "generationColumnName"
-	excludedColumnsKey        = "excludedColumns"
-	batchSizeKey              = "batchSize"
-	namespaceKey              = "namespace"
-	hostKey                   = "host"
-	portKey                   = "port"
+	pkColumnNameKey          = "keyColumnName"
+	readTimeoutMsKey         = "readTimeoutMs"
+	connectionTimeoutMsKey   = "connectionTimeoutMs"
+	optimizeLargeScanKey     = "optimizeLargeScan"
+	pkColumnNameDefaultValue = "id"
+	inheritIdFromPKKey       = "inheritIdFromPK"
+	generationColumnNameKey  = "generationColumnName"
+	excludedColumnsKey       = "excludedColumns"
+	batchSizeKey             = "batchSize"
+	namespaceKey             = "namespace"
+	hostKey                  = "host"
+	portKey                  = "port"
 )
 
 type config struct {
@@ -39,6 +40,7 @@ type config struct {
 	generationColumnName string
 	namespace            string
 	excludedColumns      []string
+	inheritIdFromPK      bool
 }
 
 type manager struct {
@@ -226,6 +228,7 @@ func (m *manager) removedEmptyOrExcluded(binMap aerospike.BinMap) {
 }
 
 func (m *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sqlParameters []interface{}) (result sql.Result, err error) {
+
 	client, err := asClient(connection.Unwrap(clientPointer))
 	if err != nil {
 		return nil, err
@@ -480,15 +483,17 @@ func (m *manager) readBatch(client *aerospike.Client, statement *dsc.QueryStatem
 }
 
 func (m *manager) processRecord(key *aerospike.Key, record *aerospike.Record, aeroSpikeScanner *scanner, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) (toContinue bool, err error) {
-	keyColumnName := m.config.keyColumnName
 	generationColumnName := m.config.generationColumnName
 	var bins = record.Bins
-
 	if generationColumnName != "" {
 		bins[generationColumnName] = record.Generation
 	}
-	if _, found := bins[keyColumnName]; !found && key != nil && key.Value() != nil {
-		bins[keyColumnName] = key.Value().GetObject()
+
+	if m.config.inheritIdFromPK {
+		keyColumnName := m.config.keyColumnName
+		if _, found := bins[keyColumnName]; !found && key != nil && key.Value() != nil {
+			bins[keyColumnName] = key.Value().GetObject()
+		}
 	}
 	aeroSpikeScanner.Values = bins
 	if err != nil {
@@ -501,9 +506,10 @@ func (m *manager) processRecords(records []*aerospike.Record, keys []*aerospike.
 	if len(records) == 0 {
 		return nil
 	}
+
 	for i, record := range records {
 		if record != nil {
-			columns := toolbox.MapKeysToStringSlice(record.Bins)
+			columns := m.enrichRecordIfNeeded(statement, record.Bins)
 			scanner := newScanner(statement, m.Config(), columns)
 			var key = keys[i]
 			if record.Key != nil {
@@ -521,11 +527,27 @@ func (m *manager) processRecords(records []*aerospike.Record, keys []*aerospike.
 	return nil
 }
 
+func (m *manager) enrichRecordIfNeeded(statement *dsc.QueryStatement, record map[string]interface{}) []string {
+	var columns = make([]string, 0)
+	for _, column := range statement.Columns {
+		var name = column.Name
+		if column.Alias != "" {
+			if value, ok := record[name]; ok {
+				delete(record, name)
+				record[column.Alias] = value
+			}
+			name = column.Alias
+		}
+		columns = append(columns, name)
+	}
+
+	return columns
+}
+
 func (m *manager) processRecordset(recordset *aerospike.Recordset, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	var records = recordset.Records
 	var errors = recordset.Errors
 	var record *aerospike.Record
-	var keyColumn = m.config.keyColumnName
 	var readTimeDuration = time.Duration(m.config.readTimeoutMs) * time.Millisecond
 	for {
 		if !recordset.IsActive() {
@@ -533,6 +555,23 @@ func (m *manager) processRecordset(recordset *aerospike.Recordset, statement *ds
 		}
 		select {
 		case record = <-records:
+			if record != nil {
+				var aMap map[string]interface{}
+				if len(record.Bins) == 0 {
+					aMap = make(map[string]interface{})
+				} else {
+					aMap = map[string]interface{}(record.Bins)
+				}
+				var columns = m.enrichRecordIfNeeded(statement, aMap)
+				aeroSpikeScanner := newScanner(statement, m.Config(), columns)
+				toContinue, err := m.processRecord(record.Key, record, aeroSpikeScanner, readingHandler)
+				if err != nil {
+					return fmt.Errorf("failed to fetch full scan data on statement %v, due to\n\t%v", statement.SQL, err)
+				}
+				if !toContinue {
+					return nil
+				}
+			}
 		case err := <-errors:
 			if err != nil {
 				return err
@@ -540,26 +579,7 @@ func (m *manager) processRecordset(recordset *aerospike.Recordset, statement *ds
 		case <-time.After(readTimeDuration):
 			return fmt.Errorf("read timeout")
 		}
-		if record != nil {
-			var aMap map[string]interface{}
-			if len(record.Bins) == 0 {
-				aMap = make(map[string]interface{})
-			} else {
-				aMap = map[string]interface{}(record.Bins)
-			}
-			columns := toolbox.MapKeysToStringSlice(aMap)
-			if pk, ok := aMap[keyColumn]; !ok || pk == nil { //add PK to record bin
-				aMap[keyColumn] = record.Key.Value()
-			}
-			aeroSpikeScanner := newScanner(statement, m.Config(), columns)
-			toContinue, err := m.processRecord(record.Key, record, aeroSpikeScanner, readingHandler)
-			if err != nil {
-				return fmt.Errorf("failed to fetch full scan data on statement %v, due to\n\t%v", statement.SQL, err)
-			}
-			if !toContinue {
-				return nil
-			}
-		}
+
 	}
 	return nil
 }
@@ -615,34 +635,28 @@ func (m *manager) getBatchPolicy() *aerospike.BatchPolicy {
 	return result
 }
 
-func newConfig(dscConfig *dsc.Config) (*config, error) {
-	var keyColumnName = dscConfig.GetString(keyColumnNameKey, keyColumnNameDefaultValue)
-	namespace := dscConfig.Get(namespaceKey)
+func newConfig(conf *dsc.Config) (*config, error) {
+	namespace := conf.Get(namespaceKey)
 	if namespace == "" {
 		return nil, fmt.Errorf("namespaceKey was empty")
 	}
 
-	var generationColumnNameValue string
-	if dscConfig.Has(generationColumnNameKey) {
-		value := dscConfig.Get(generationColumnNameKey)
-		generationColumnNameValue = value
-	}
-
+	var keyColumnName = conf.GetString(pkColumnNameKey, pkColumnNameDefaultValue)
+	var generationColumnNameValue = conf.GetString(generationColumnNameKey, "")
+	var readTimeoutMs = conf.GetInt(readTimeoutMsKey, 1000*60)
+	var inheritIdFromPK = conf.GetBoolean(inheritIdFromPKKey, true)
 	var excluded []string
-	if dscConfig.Has(excludedColumnsKey) {
-		excluded = strings.Split(dscConfig.Get(excludedColumnsKey), ",")
+	if conf.Has(excludedColumnsKey) {
+		excluded = strings.Split(conf.Get(excludedColumnsKey), ",")
 	}
 
-	var readTimeoutMs = 1000 * 60
-	if dscConfig.Has(readTimeoutMsKey) {
-		readTimeoutMs = toolbox.AsInt(dscConfig.Get(readTimeoutMsKey))
-	}
 	return &config{
-		Config:               dscConfig,
+		Config:               conf,
 		namespace:            namespace,
 		readTimeoutMs:        readTimeoutMs,
 		keyColumnName:        keyColumnName,
 		excludedColumns:      excluded,
 		generationColumnName: generationColumnNameValue,
+		inheritIdFromPK:      inheritIdFromPK,
 	}, nil
 }
