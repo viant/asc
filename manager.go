@@ -22,9 +22,11 @@ const (
 	keyColumnNameKey          = "keyColumnName"
 	readTimeoutMsKey          = "readTimeoutMs"
 	connectionTimeoutMsKey    = "connectionTimeoutMs"
+	optimizeLargeScanKey      = "optimizeLargeScan"
 	keyColumnNameDefaultValue = "id"
 	generationColumnNameKey   = "generationColumnName"
 	excludedColumnsKey        = "excludedColumns"
+	batchSizeKey              = "batchSize"
 	namespaceKey              = "namespace"
 	hostKey                   = "host"
 	portKey                   = "port"
@@ -41,8 +43,8 @@ type config struct {
 
 type manager struct {
 	*dsc.AbstractManager
-	config     *config
-	scanPolicy *aerospike.ScanPolicy
+	config      *config
+	scanPolicy  *aerospike.ScanPolicy
 	batchPolicy *aerospike.BatchPolicy
 }
 
@@ -124,7 +126,7 @@ func (m *manager) buildUpdateData(statement *dsc.DmlStatement, dmlParameters []i
 	}
 
 	if len(statement.Criteria) != 1 || statement.Criteria[0].LeftOperand != keyColumnName {
-		return nil, nil, 0, fmt.Errorf("Invalid criteria - expected where clause on %v, but had %v", keyColumnName, statement.Criteria)
+		return nil, nil, 0, fmt.Errorf("invalid criteria - expected where clause on %v, but had %v", keyColumnName, statement.Criteria)
 	}
 	keyValues, err := statement.CriteriaValues(parameters)
 	if err != nil {
@@ -210,7 +212,6 @@ func (m *manager) deleteSelected(client *aerospike.Client, statement *dsc.DmlSta
 }
 
 func (m *manager) removedEmptyOrExcluded(binMap aerospike.BinMap) {
-
 	for k, v := range binMap {
 		if v == nil {
 			delete(binMap, k)
@@ -291,7 +292,7 @@ func (m *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStatemen
 	var err error
 	var recordset *aerospike.Recordset
 
-	if m.config.GetBoolean("optimizeLargeScan", false) {
+	if m.config.GetBoolean(optimizeLargeScanKey, false) {
 		return m.scanAllWithKeys(client, statement, readingHandler, statement.ColumnNames()...)
 	}
 	if statement.AllField {
@@ -356,7 +357,7 @@ func (m *manager) scanNodeKeys(waitGroup *sync.WaitGroup, filename string, clien
 			select {
 			case record = <-records:
 				if record != nil && record.Key != nil {
-					_, err = writer.Write(record.Key.Digest())
+					err = WriteKey(record.Key, writer)
 					if err != nil {
 						return
 					}
@@ -378,6 +379,7 @@ func (m *manager) scanNodeKeys(waitGroup *sync.WaitGroup, filename string, clien
 }
 
 func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error), binNames ... string) error {
+
 	scanPolicy := m.getScanKeyPolicy()
 	var uuid = uuid2.NewV1().String()
 	var baseDirectory = path.Join(m.Config().GetString("scanKeysBaseDirectory", os.Getenv("TMPDIR")), uuid)
@@ -409,7 +411,7 @@ func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.Query
 		return fmt.Errorf("failed to scan keys: %v", err)
 	}
 	batchPolicy := m.getBatchPolicy()
-	var batchSize = m.config.GetInt("batchSize", 256)
+	var batchSize = m.config.GetInt(batchSizeKey, 256)
 	iterator := NewBatchIterator(client, batchPolicy, batchSize, m.config.namespace, statement.Table, nodeKeysFilenames, binNames...)
 	for iterator.HasNext() {
 		var batch = &Batch{}
@@ -462,9 +464,9 @@ func (m *manager) readBatch(client *aerospike.Client, statement *dsc.QueryStatem
 	var batchPolicy = m.getBatchPolicy()
 	var records []*aerospike.Record
 	if statement.AllField {
-		records, err = client.BatchGet(batchPolicy , keys)
+		records, err = client.BatchGet(batchPolicy, keys)
 	} else {
-		records, err = client.BatchGet(batchPolicy , keys, statement.ColumnNames()...)
+		records, err = client.BatchGet(batchPolicy, keys, statement.ColumnNames()...)
 	}
 	if err != nil {
 		return err
@@ -485,8 +487,8 @@ func (m *manager) processRecord(key *aerospike.Key, record *aerospike.Record, ae
 	if generationColumnName != "" {
 		bins[generationColumnName] = record.Generation
 	}
-	if _, found := bins[keyColumnName]; !found && key != nil && key.Value() != nil{
-		bins[keyColumnName] = key.Value().String()
+	if _, found := bins[keyColumnName]; !found && key != nil && key.Value() != nil {
+		bins[keyColumnName] = key.Value().GetObject()
 	}
 	aeroSpikeScanner.Values = bins
 	if err != nil {
@@ -581,8 +583,6 @@ func (m *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sq
 	}
 }
 
-
-
 func (m *manager) applyPolicySettings(policy *aerospike.BasePolicy) {
 	policy.MaxRetries = m.Config().GetInt("maxRetries", 10)
 	policy.SleepBetweenRetries = m.Config().GetDuration("sleepBetweenRetriesMs", time.Millisecond, 100*time.Millisecond)
@@ -604,8 +604,6 @@ func (m *manager) getScanKeyPolicy() *aerospike.ScanPolicy {
 	return result
 }
 
-
-
 func (m *manager) getBatchPolicy() *aerospike.BatchPolicy {
 	if m.batchPolicy != nil {
 		return m.batchPolicy
@@ -616,8 +614,6 @@ func (m *manager) getBatchPolicy() *aerospike.BatchPolicy {
 	m.batchPolicy = result
 	return result
 }
-
-
 
 func newConfig(dscConfig *dsc.Config) (*config, error) {
 	var keyColumnName = dscConfig.GetString(keyColumnNameKey, keyColumnNameDefaultValue)

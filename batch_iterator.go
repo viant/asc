@@ -47,7 +47,8 @@ func (i *BatchIterator) initialiseScannerIfNeeded(filename string) bool {
 func (i *BatchIterator) scanKeys() ([]*aerospike.Key, bool) {
 	var keys = make([]*aerospike.Key, 0)
 	for j := 0; j < i.batchSize; j++ {
-		var position = int(atomic.AddInt32(&i.filePosition, 20))
+
+		var position = int(atomic.LoadInt32(&i.filePosition))
 		if  position >= int(i.fileInfo.Size()) {
 			i.file.Close()
 			atomic.StoreInt32(&i.filePosition, 0)
@@ -57,13 +58,8 @@ func (i *BatchIterator) scanKeys() ([]*aerospike.Key, bool) {
 			atomic.AddInt32(&i.fileIndex, 1)
 			break
 		}
-		var digest = make([]byte, 20)
-		read, err := i.file.Read(digest)
-		if err != nil || read != 20 {
-			i.err = fmt.Errorf("failed to read digest: %v", err)
-			return nil, false
-		}
-		key, err := aerospike.NewKeyWithDigest(i.namespace, i.table, nil, digest)
+		key, readCount, err := ReadKey(i.file, i.namespace, i.table)
+		atomic.AddInt32(&i.filePosition, int32(readCount))
 		if err != nil {
 			i.err = err
 			return nil, false
@@ -78,6 +74,8 @@ func (i *BatchIterator) readInBatch(keys []*aerospike.Key) bool {
 	i.batch.Records, i.err = i.client.BatchGet(i.batchPolicy, keys, i.binNames...)
 	return i.err == nil
 }
+
+
 
 //HasNext check is has more record, if needed it will scan keys from files to batch corresponding records
 func (i *BatchIterator) HasNext() bool {
