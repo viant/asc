@@ -406,7 +406,11 @@ func (m *manager) scanNodeKeys(waitGroup *sync.WaitGroup, filename string, clien
 func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error), binNames ...string) error {
 
 	scanPolicy := m.getScanKeyPolicy()
-	var uuid = uuid2.NewV1().String()
+	var uuid = toolbox.AsString(time.Now().Unix())
+	if UUID, err := uuid2.NewV1();err == nil {
+		uuid = UUID.String()
+	}
+
 	var baseDirectory = path.Join(m.Config().GetString("scanKeysBaseDirectory", os.Getenv("TMPDIR")), uuid)
 	if err := toolbox.CreateDirIfNotExist(baseDirectory); err != nil {
 		return fmt.Errorf("failed to scan keys - unable to create scanKeysBaseDirectory: %v, %v", baseDirectory, err)
