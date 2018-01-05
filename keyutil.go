@@ -18,21 +18,26 @@ const (
 func WriteKey(key *aerospike.Key, writer io.Writer) (err error) {
 	var source = key.Value()
 	var payload []byte
-	switch value := source.GetObject().(type) {
-	case string:
-		textLength := uint8(len(value))
-		payload = append([]byte{keyTypeString, textLength}, []byte(value)...)
-	case []byte:
-		textLength := uint8(len(value))
-		payload = append([]byte{keyTypeBytes, textLength}, []byte(value)...)
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-		var data = make([]byte, 8)
-		binary.LittleEndian.PutUint64(data, uint64(toolbox.AsInt(value)))
-		payload = append([]byte{keyTypeInt}, data...)
+	if source != nil && source.GetObject() != nil {
+		switch value := source.GetObject().(type) {
+		case string:
+			textLength := uint8(len(value))
+			payload = append([]byte{keyTypeString, textLength}, []byte(value)...)
+		case []byte:
+			textLength := uint8(len(value))
+			payload = append([]byte{keyTypeBytes, textLength}, []byte(value)...)
+		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+			var data= make([]byte, 8)
+			binary.LittleEndian.PutUint64(data, uint64(toolbox.AsInt(value)))
+			payload = append([]byte{keyTypeInt}, data...)
 
-	default:
+		default:
+			payload = append([]byte{keyTypeDigest}, key.Digest()...)
+		}
+	} else {
 		payload = append([]byte{keyTypeDigest}, key.Digest()...)
 	}
+
 	n, err := writer.Write(payload)
 	if err != nil {
 		return err

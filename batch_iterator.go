@@ -56,8 +56,10 @@ func (i *BatchIterator) scanKeys() ([]*aerospike.Key, bool) {
 			i.fileInfo = nil
 			toolbox.RemoveFileIfExist(i.fileNames[i.fileIndex])
 			atomic.AddInt32(&i.fileIndex, 1)
+
 			break
 		}
+
 		key, readCount, err := ReadKey(i.file, i.namespace, i.table)
 		atomic.AddInt32(&i.filePosition, int32(readCount))
 		if err != nil {
@@ -79,8 +81,7 @@ func (i *BatchIterator) readInBatch(keys []*aerospike.Key) bool {
 func (i *BatchIterator) HasNext() bool {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
-	var iterationCont = 1000 //some high number
-
+	var iterationCont = 10000 //some high number
 	for k := 0; k < iterationCont; k++ {
 		var index = int(atomic.LoadInt32(&i.fileIndex))
 		if index >= len(i.fileNames) {

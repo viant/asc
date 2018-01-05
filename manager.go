@@ -330,22 +330,28 @@ type groupControl struct {
 }
 
 func (m *manager) scanNodeKeys(waitGroup *sync.WaitGroup, filename string, client *aerospike.Client, node *aerospike.Node, scanPolicy *aerospike.ScanPolicy, namespace, table string, batchControl *groupControl) error {
+
 	recordSet, err := client.ScanNode(scanPolicy, node, namespace, table)
 	if err != nil {
-		return err
+		if ! strings.Contains(strings.ToLower(err.Error()), "eof") {
+			return err
+		}
 	}
-	var readTimeout = m.Config().GetDuration("readTimeoutMs", time.Millisecond, 15*time.Second)
-	var retries = m.Config().GetInt("maxRetries", 2)
-	var timeout = readTimeout * time.Duration(retries*2)
-
 	var errors = recordSet.Errors
 	var records = recordSet.Records
+
+	var readTimeout = m.Config().GetDuration("readTimeoutMs", time.Millisecond, 15*time.Second)
+	var maxRetries = m.Config().GetInt("maxRetries", 2)
+	var timeout = readTimeout * time.Duration(maxRetries*2)
+
 	var record *aerospike.Record
 	writer, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
+	var offset = 0
 	var count = 0
+	var retry = 0
 	go func() {
 		defer writer.Close()
 
@@ -359,15 +365,32 @@ func (m *manager) scanNodeKeys(waitGroup *sync.WaitGroup, filename string, clien
 		for recordSet.IsActive() {
 			select {
 			case record = <-records:
+				if count < offset {
+					count++
+					continue
+				}
 				if record != nil && record.Key != nil {
 					err = WriteKey(record.Key, writer)
 					if err != nil {
 						return
 					}
 					count++
+					offset++
 				}
 			case err = <-errors:
-				return
+				if retry > maxRetries {
+					return
+				}
+				count = 0
+				retry++;
+				recordSet, err = client.ScanNode(scanPolicy, node, namespace, table)
+				if err != nil {
+					return
+				}
+				errors = recordSet.Errors
+				records = recordSet.Records
+				continue
+
 			case <-time.After(timeout):
 				err = fmt.Errorf("read timeout")
 				return
@@ -377,7 +400,6 @@ func (m *manager) scanNodeKeys(waitGroup *sync.WaitGroup, filename string, clien
 			}
 		}
 	}()
-
 	return err
 }
 
@@ -395,14 +417,15 @@ func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.Query
 	waitGroup.Add(len(nodes))
 	var nodeKeysFilenames = make([]string, 0)
 	var control = &groupControl{}
+
 	for _, node := range nodes {
 		var name = strings.Replace(node.String(), ":", "-", len(node.String())) + ".key"
 		var nodeKeyFilename = path.Join(baseDirectory, name)
 		nodeKeysFilenames = append(nodeKeysFilenames, nodeKeyFilename)
-		err = m.scanNodeKeys(waitGroup, nodeKeyFilename, client, node, scanPolicy, m.config.namespace, statement.Table, control)
+
+		err := m.scanNodeKeys(waitGroup, nodeKeyFilename, client, node, scanPolicy, m.config.namespace, statement.Table, control)
 		if err != nil {
-			atomic.StoreInt32(&control.terminated, 1)
-			break
+			return err
 		}
 	}
 	defer toolbox.RemoveFileIfExist(append(nodeKeysFilenames, baseDirectory)...)
@@ -413,6 +436,7 @@ func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.Query
 	if err != nil {
 		return fmt.Errorf("failed to scan keys: %v", err)
 	}
+
 	batchPolicy := m.getBatchPolicy()
 	var batchSize = m.config.GetInt(batchSizeKey, 256)
 	iterator := NewBatchIterator(client, batchPolicy, batchSize, m.config.namespace, statement.Table, nodeKeysFilenames, binNames...)
@@ -589,11 +613,13 @@ func (m *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sq
 	if err != nil {
 		return err
 	}
+
 	parser := dsc.NewQueryParser()
 	statement, err := parser.Parse(sql)
 	if err != nil {
 		return fmt.Errorf("failed to parse statement %v, %v", sql, err)
 	}
+
 	if statement.Criteria == nil || len(statement.Criteria) == 0 {
 		return m.scanAll(client, statement, readingHandler)
 	} else if len(statement.Criteria) > 1 {
@@ -604,10 +630,11 @@ func (m *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sq
 }
 
 func (m *manager) applyPolicySettings(policy *aerospike.BasePolicy) {
-	policy.MaxRetries = m.Config().GetInt("maxRetries", 10)
-	policy.SleepBetweenRetries = m.Config().GetDuration("sleepBetweenRetriesMs", time.Millisecond, 100*time.Millisecond)
+	policy.MaxRetries = m.Config().GetInt("maxRetries", 20)
+	policy.SleepBetweenRetries = m.Config().GetDuration("sleepBetweenRetriesMs", time.Millisecond, 500*time.Millisecond)
 	policy.Timeout = m.Config().GetDuration("readTimeoutMs", time.Millisecond, 0)
 	policy.SocketTimeout = m.Config().GetDuration("connectionTimeoutMsKey", time.Millisecond, 2*time.Minute)
+
 	policy.SleepMultiplier = m.Config().GetFloat("sleepMultiplier", 3.0)
 
 }
