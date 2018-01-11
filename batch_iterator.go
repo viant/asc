@@ -22,6 +22,7 @@ type BatchIterator struct {
 	batchPolicy  *aerospike.BatchPolicy
 	batch        *Batch
 	fileInfo     os.FileInfo
+	recordCount  int32
 	filePosition int32
 	err          error
 	batchSize    int
@@ -50,13 +51,15 @@ func (i *BatchIterator) scanKeys() ([]*aerospike.Key, bool) {
 
 		var position = int(atomic.LoadInt32(&i.filePosition))
 		if position >= int(i.fileInfo.Size()) {
+
 			i.file.Close()
 			atomic.StoreInt32(&i.filePosition, 0)
 			i.file = nil
 			i.fileInfo = nil
 			toolbox.RemoveFileIfExist(i.fileNames[i.fileIndex])
+			fmt.Printf("comleted file: %v %v\n", i.fileInfo, i.recordCount)
 			atomic.AddInt32(&i.fileIndex, 1)
-
+			atomic.StoreInt32(&i.recordCount, 0)
 			break
 		}
 
@@ -73,7 +76,13 @@ func (i *BatchIterator) scanKeys() ([]*aerospike.Key, bool) {
 
 func (i *BatchIterator) readInBatch(keys []*aerospike.Key) bool {
 	i.batch.Keys = keys
-	i.batch.Records, i.err = i.client.BatchGet(i.batchPolicy, keys, i.binNames...)
+	var err error
+	i.batch.Records, err = i.client.BatchGet(i.batchPolicy, keys, i.binNames...)
+	if err != nil {
+		i.err = nil
+	} else {
+		atomic.AddInt32(&i.recordCount, int32(len(i.batch.Records)))
+	}
 	return i.err == nil
 }
 

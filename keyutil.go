@@ -27,7 +27,7 @@ func WriteKey(key *aerospike.Key, writer io.Writer) (err error) {
 			textLength := uint8(len(value))
 			payload = append([]byte{keyTypeBytes, textLength}, []byte(value)...)
 		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-			var data= make([]byte, 8)
+			var data = make([]byte, 8)
 			binary.LittleEndian.PutUint64(data, uint64(toolbox.AsInt(value)))
 			payload = append([]byte{keyTypeInt}, data...)
 

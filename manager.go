@@ -9,13 +9,8 @@ import (
 	"time"
 
 	"github.com/aerospike/aerospike-client-go"
-	uuid2 "github.com/satori/go.uuid"
 	"github.com/viant/dsc"
 	"github.com/viant/toolbox"
-	"os"
-	"path"
-	"sync"
-	"sync/atomic"
 )
 
 const (
@@ -325,125 +320,22 @@ func (m *manager) getConfigValueAsFloat(configKey string, defaultValue float64) 
 }
 
 type groupControl struct {
-	err        error
-	terminated int32
-}
-
-func (m *manager) scanNodeKeys(waitGroup *sync.WaitGroup, filename string, client *aerospike.Client, node *aerospike.Node, scanPolicy *aerospike.ScanPolicy, namespace, table string, batchControl *groupControl) error {
-
-	recordSet, err := client.ScanNode(scanPolicy, node, namespace, table)
-	if err != nil {
-		if ! strings.Contains(strings.ToLower(err.Error()), "eof") {
-			return err
-		}
-	}
-	var errors = recordSet.Errors
-	var records = recordSet.Records
-
-	var readTimeout = m.Config().GetDuration("readTimeoutMs", time.Millisecond, 15*time.Second)
-	var maxRetries = m.Config().GetInt("maxRetries", 2)
-	var timeout = readTimeout * time.Duration(maxRetries*2)
-
-	var record *aerospike.Record
-	writer, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	var offset = 0
-	var count = 0
-	var retry = 0
-	go func() {
-		defer writer.Close()
-
-		defer func() {
-			if err != nil {
-				batchControl.err = fmt.Errorf("unable to get keys from %v, %v", node.String(), err)
-				atomic.StoreInt32(&batchControl.terminated, 1)
-			}
-			waitGroup.Done()
-		}()
-		for recordSet.IsActive() {
-			select {
-			case record = <-records:
-				if count < offset {
-					count++
-					continue
-				}
-				if record != nil && record.Key != nil {
-					err = WriteKey(record.Key, writer)
-					if err != nil {
-						return
-					}
-					count++
-					offset++
-				}
-			case err = <-errors:
-				if retry > maxRetries {
-					return
-				}
-				count = 0
-				retry++;
-				recordSet, err = client.ScanNode(scanPolicy, node, namespace, table)
-				if err != nil {
-					return
-				}
-				errors = recordSet.Errors
-				records = recordSet.Records
-				continue
-
-			case <-time.After(timeout):
-				err = fmt.Errorf("read timeout")
-				return
-			}
-			if atomic.LoadInt32(&batchControl.terminated) == 1 {
-				return
-			}
-		}
-	}()
-	return err
+	err           error
+	terminated    int32
+	nodeMaxRecord int32
 }
 
 func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error), binNames ...string) error {
-
 	scanPolicy := m.getScanKeyPolicy()
-	var uuid = toolbox.AsString(time.Now().Unix())
-	if UUID, err := uuid2.NewV1();err == nil {
-		uuid = UUID.String()
-	}
-
-	var baseDirectory = path.Join(m.Config().GetString("scanKeysBaseDirectory", os.Getenv("TMPDIR")), uuid)
-	if err := toolbox.CreateDirIfNotExist(baseDirectory); err != nil {
-		return fmt.Errorf("failed to scan keys - unable to create scanKeysBaseDirectory: %v, %v", baseDirectory, err)
-	}
-	var err error
-	var nodes = client.GetNodes()
-	waitGroup := &sync.WaitGroup{}
-	waitGroup.Add(len(nodes))
-	var nodeKeysFilenames = make([]string, 0)
-	var control = &groupControl{}
-
-	for _, node := range nodes {
-		var name = strings.Replace(node.String(), ":", "-", len(node.String())) + ".key"
-		var nodeKeyFilename = path.Join(baseDirectory, name)
-		nodeKeysFilenames = append(nodeKeysFilenames, nodeKeyFilename)
-
-		err := m.scanNodeKeys(waitGroup, nodeKeyFilename, client, node, scanPolicy, m.config.namespace, statement.Table, control)
-		if err != nil {
-			return err
-		}
-	}
-	defer toolbox.RemoveFileIfExist(append(nodeKeysFilenames, baseDirectory)...)
-	waitGroup.Wait()
-	if control.err != nil {
-		err = control.err
-	}
+	keyScanner := NewKeyScanner(client, scanPolicy, "", m.config.namespace, statement.Table)
+	filenames, err := keyScanner.Scan()
 	if err != nil {
-		return fmt.Errorf("failed to scan keys: %v", err)
+		return err
 	}
 
 	batchPolicy := m.getBatchPolicy()
 	var batchSize = m.config.GetInt(batchSizeKey, 256)
-	iterator := NewBatchIterator(client, batchPolicy, batchSize, m.config.namespace, statement.Table, nodeKeysFilenames, binNames...)
+	iterator := NewBatchIterator(client, batchPolicy, batchSize, m.config.namespace, statement.Table, filenames, binNames...)
 	for iterator.HasNext() {
 		var batch = &Batch{}
 		err = iterator.Next(&batch)
@@ -576,7 +468,7 @@ func (m *manager) processRecordset(recordset *aerospike.Recordset, statement *ds
 	var records = recordset.Records
 	var errors = recordset.Errors
 	var record *aerospike.Record
-	var readTimeDuration = time.Duration(m.config.readTimeoutMs) * time.Millisecond
+
 	for {
 		if !recordset.IsActive() {
 			return nil
@@ -604,8 +496,6 @@ func (m *manager) processRecordset(recordset *aerospike.Recordset, statement *ds
 			if err != nil {
 				return err
 			}
-		case <-time.After(readTimeDuration):
-			return fmt.Errorf("read timeout")
 		}
 
 	}
@@ -634,13 +524,9 @@ func (m *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sq
 }
 
 func (m *manager) applyPolicySettings(policy *aerospike.BasePolicy) {
-	policy.MaxRetries = m.Config().GetInt("maxRetries", 20)
-	policy.SleepBetweenRetries = m.Config().GetDuration("sleepBetweenRetriesMs", time.Millisecond, 500*time.Millisecond)
-	policy.Timeout = m.Config().GetDuration("readTimeoutMs", time.Millisecond, 0)
-	policy.SocketTimeout = m.Config().GetDuration("connectionTimeoutMsKey", time.Millisecond, 2*time.Minute)
-
-	policy.SleepMultiplier = m.Config().GetFloat("sleepMultiplier", 3.0)
-
+	policy.MaxRetries = m.Config().GetInt("maxRetries", 2)
+	policy.SleepBetweenRetries = m.Config().GetDuration("sleepBetweenRetriesMs", time.Millisecond, time.Millisecond)
+	policy.SleepMultiplier = m.Config().GetFloat("sleepMultiplier", 1.0)
 }
 
 func (m *manager) getScanKeyPolicy() *aerospike.ScanPolicy {
@@ -649,7 +535,6 @@ func (m *manager) getScanKeyPolicy() *aerospike.ScanPolicy {
 	}
 	result := aerospike.NewScanPolicy()
 	result.IncludeBinData = false
-	result.ScanPercent = m.Config().GetInt("scanPercent", 100)
 	m.applyPolicySettings(result.BasePolicy)
 	m.scanPolicy = result
 	return result
