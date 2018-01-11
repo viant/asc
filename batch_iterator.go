@@ -57,7 +57,6 @@ func (i *BatchIterator) scanKeys() ([]*aerospike.Key, bool) {
 			i.file = nil
 			i.fileInfo = nil
 			toolbox.RemoveFileIfExist(i.fileNames[i.fileIndex])
-			fmt.Printf("comleted file: %v %v\n", i.fileInfo, i.recordCount)
 			atomic.AddInt32(&i.fileIndex, 1)
 			atomic.StoreInt32(&i.recordCount, 0)
 			break
