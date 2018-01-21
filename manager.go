@@ -535,6 +535,11 @@ func (m *manager) getScanKeyPolicy() *aerospike.ScanPolicy {
 	}
 	result := aerospike.NewScanPolicy()
 	result.IncludeBinData = false
+	//Testing only option
+	scanPercentage := m.Config().GetInt("scanPct", 0)
+	if scanPercentage > 0 {
+		result.ScanPercent = scanPercentage
+	}
 	m.applyPolicySettings(result.BasePolicy)
 	m.scanPolicy = result
 	return result
