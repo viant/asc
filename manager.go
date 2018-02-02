@@ -18,6 +18,7 @@ const (
 	readTimeoutMsKey         = "readTimeoutMs"
 	connectionTimeoutMsKey   = "connectionTimeoutMs"
 	optimizeLargeScanKey     = "optimizeLargeScan"
+	scanBaseDirectoryKey     = "scanBaseDirectory"
 	pkColumnNameDefaultValue = "id"
 	inheritIdFromPKKey       = "inheritIdFromPK"
 	generationColumnNameKey  = "generationColumnName"
@@ -327,7 +328,8 @@ type groupControl struct {
 
 func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error), binNames ...string) error {
 	scanPolicy := m.getScanKeyPolicy()
-	keyScanner := NewKeyScanner(client, scanPolicy, "", m.config.namespace, statement.Table)
+	baseDirectory := m.config.GetString(scanBaseDirectoryKey, "")
+	keyScanner := NewKeyScanner(client, scanPolicy, baseDirectory, m.config.namespace, statement.Table)
 	filenames, err := keyScanner.Scan()
 	if err != nil {
 		return err
