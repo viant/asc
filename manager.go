@@ -388,15 +388,25 @@ func (m *manager) readBatch(client *aerospike.Client, statement *dsc.QueryStatem
 	}
 	var batchPolicy = m.getBatchPolicy()
 	var records []*aerospike.Record
-	if statement.AllField {
-		records, err = client.BatchGet(batchPolicy, keys)
-	} else {
-		records, err = client.BatchGet(batchPolicy, keys, statement.ColumnNames()...)
-	}
-	if err != nil {
-		return err
-	}
 
+	maxRetries := m.Config().GetInt("maxRetries", 2)
+	if maxRetries == 0 {
+		maxRetries = 1
+	}
+	for i := 0; i < maxRetries; i++ {
+		if statement.AllField {
+			records, err = client.BatchGet(batchPolicy, keys)
+		} else {
+			records, err = client.BatchGet(batchPolicy, keys, statement.ColumnNames()...)
+		}
+		if err != nil {
+			if strings.Contains(err.Error(), "EOF") {
+				continue
+			}
+			return err
+		}
+		break
+	}
 	err = m.processRecords(records, keys, statement, readingHandler)
 	if err != nil {
 		return err
