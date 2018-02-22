@@ -1,9 +1,7 @@
 package asc
 
 import (
-	"encoding/json"
 	"github.com/viant/dsc"
-	"github.com/viant/toolbox"
 )
 
 type managerFactory struct{}
@@ -19,18 +17,11 @@ func (f *managerFactory) Create(config *dsc.Config) (dsc.Manager, error) {
 	return self, err
 }
 
-func (f managerFactory) CreateFromURL(url string) (dsc.Manager, error) {
-	reader, _, err := toolbox.OpenReaderFromURL(url)
+func (f managerFactory) CreateFromURL(URL string) (dsc.Manager, error) {
+	config, err := dsc.NewConfigFromURL(URL)
 	if err != nil {
 		return nil, err
 	}
-	defer reader.Close()
-	config := &dsc.Config{}
-	err = json.NewDecoder(reader).Decode(config)
-	if err != nil {
-		return nil, err
-	}
-	config.Init()
 	return f.Create(config)
 }
 
