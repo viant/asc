@@ -1,6 +1,6 @@
 package asc_test
 
-//Refactoring ... 
+//Refactoring ...
 //
 //import (
 //	"github.com/stretchr/testify/assert"
