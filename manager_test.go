@@ -43,7 +43,7 @@ package asc_test
 //func TestReadSingle(t *testing.T) {
 //
 //	dsunit.InitDatastoreFromURL(t, "test://test/init.json")
-//	dsunit.PrepareDatastoreFor(t, "test", "test://test/", "ReadSingle")
+//	dsunit.PrepareFor(t, "test", "test://test/", "ReadSingle")
 //
 //	manager := Manager(t)
 //	singleUser := User{}
@@ -76,7 +76,7 @@ package asc_test
 //func TestReadAll(t *testing.T) {
 //
 //	dsunit.InitDatastoreFromURL(t, "test://test/init.json")
-//	dsunit.PrepareDatastoreFor(t, "test", "test://test/", "ReadAll")
+//	dsunit.PrepareFor(t, "test", "test://test/", "ReadAll")
 //	factory := dsc.NewManagerFactory()
 //	configUrl := dsunit.ExpandTestProtocolAsURLIfNeeded("test://test/config/store.json")
 //	manager, err := factory.CreateFromURL(configUrl)
@@ -150,7 +150,7 @@ package asc_test
 //
 //func TestPersistAll(t *testing.T) {
 //	dsunit.InitDatastoreFromURL(t, "test://test/init.json")
-//	dsunit.PrepareDatastoreFor(t, "test", "test://test/", "PersistAll")
+//	dsunit.PrepareFor(t, "test", "test://test/", "PersistAll")
 //	manager := Manager(t)
 //
 //	{
@@ -181,8 +181,8 @@ package asc_test
 //		assert.Equal(t, 3, updated)
 //
 //	}
-//	dsunit.ExpectDatasetFor(t, "test", dsunit.SnapshotDatasetCheckPolicy, "test://test/", "PersistAll")
-//	dsunit.ExpectDatasetFor(t, "test", dsunit.FullTableDatasetCheckPolicy, "test://test/", "PersistAll")
+//	dsunit.ExpectFor(t, "test", dsunit.SnapshotDatasetCheckPolicy, "test://test/", "PersistAll")
+//	dsunit.ExpectFor(t, "test", dsunit.FullTableDatasetCheckPolicy, "test://test/", "PersistAll")
 //
 //}
 //
@@ -205,17 +205,17 @@ package asc_test
 //
 //func TestDelete(t *testing.T) {
 //	dsunit.InitDatastoreFromURL(t, "test://test/init.json")
-//	dsunit.PrepareDatastoreFor(t, "test", "test://test/", "Delete")
+//	dsunit.PrepareFor(t, "test", "test://test/", "Delete")
 //	manager := Manager(t)
 //	manager.Execute("DELETE FROM users WHERE id = ?", 4)
 //
-//	dsunit.ExpectDatasetFor(t, "test", dsunit.FullTableDatasetCheckPolicy, "test://test/", "Delete")
+//	dsunit.ExpectFor(t, "test", dsunit.FullTableDatasetCheckPolicy, "test://test/", "Delete")
 //
 //}
 //
 //func TestInvalidSql(t *testing.T) {
 //	dsunit.InitDatastoreFromURL(t, "test://test/init.json")
-//	dsunit.PrepareDatastoreFor(t, "test", "test://test/", "Delete")
+//	dsunit.PrepareFor(t, "test", "test://test/", "Delete")
 //	manager := Manager(t)
 //	_, err := manager.Execute("SET FROM users WHERE id = ?", 4)
 //	assert.NotNil(t, err)
