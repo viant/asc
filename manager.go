@@ -306,25 +306,6 @@ func (m *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStatemen
 	return m.processRecordset(recordset, statement, readingHandler)
 }
 
-func (m *manager) getConfigValueAsInt(configKey string, defaultValue int) int {
-	if !m.Config().Has(configKey) {
-		return defaultValue
-	}
-	return toolbox.AsInt(m.Config().Get(configKey))
-}
-
-func (m *manager) getConfigValueAsFloat(configKey string, defaultValue float64) float64 {
-	if !m.Config().Has(configKey) {
-		return defaultValue
-	}
-	return toolbox.AsFloat(m.Config().Get(configKey))
-}
-
-type groupControl struct {
-	err           error
-	terminated    int32
-	nodeMaxRecord int32
-}
 
 func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error), binNames ...string) error {
 	scanPolicy := m.getScanKeyPolicy()
