@@ -190,7 +190,7 @@ func (m *manager) deleteAll(client *aerospike.Client, statement *dsc.DmlStatemen
 
 func (m *manager) deleteSelected(client *aerospike.Client, statement *dsc.DmlStatement, dmlParameters []interface{}) (result sql.Result, err error) {
 	parameters := toolbox.NewSliceIterator(dmlParameters)
-	keys, err := m.buildKeysForCriteria(&statement.BaseStatement, parameters)
+	keys, err := m.buildKeysForCriteria(statement.BaseStatement, parameters)
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +363,7 @@ func (m *manager) buildKeysForCriteria(statement *dsc.BaseStatement, parameters 
 
 func (m *manager) readBatch(client *aerospike.Client, statement *dsc.QueryStatement, queryParameters []interface{}, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	parameters := toolbox.NewSliceIterator(queryParameters)
-	keys, err := m.buildKeysForCriteria(&statement.BaseStatement, parameters)
+	keys, err := m.buildKeysForCriteria(statement.BaseStatement, parameters)
 	if err != nil {
 		return err
 	}
