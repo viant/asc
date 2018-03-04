@@ -395,7 +395,7 @@ func (m *manager) readBatch(client *aerospike.Client, statement *dsc.QueryStatem
 	return nil
 }
 
-func (m *manager) processRecord(key *aerospike.Key, record *aerospike.Record, aeroSpikeScanner *scanner, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) (toContinue bool, err error) {
+func (m *manager) processRecord(key *aerospike.Key, record *aerospike.Record, scanner *dsc.SQLScanner, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) (toContinue bool, err error) {
 	generationColumnName := m.config.generationColumnName
 	var bins = record.Bins
 	if generationColumnName != "" {
@@ -408,11 +408,11 @@ func (m *manager) processRecord(key *aerospike.Key, record *aerospike.Record, ae
 			bins[keyColumnName] = key.Value().GetObject()
 		}
 	}
-	aeroSpikeScanner.Values = bins
+	scanner.Values = bins
 	if err != nil {
 		return false, err
 	}
-	return readingHandler(aeroSpikeScanner)
+	return readingHandler(scanner)
 }
 
 func (m *manager) processRecords(records []*aerospike.Record, keys []*aerospike.Key, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
@@ -423,7 +423,7 @@ func (m *manager) processRecords(records []*aerospike.Record, keys []*aerospike.
 	for i, record := range records {
 		if record != nil {
 			columns := m.enrichRecordIfNeeded(statement, record.Bins)
-			scanner := newScanner(statement, m.Config(), columns)
+			scanner := dsc.NewSQLScanner(statement, m.Config(), columns)
 			var key = keys[i]
 			if record.Key != nil {
 				key = record.Key
@@ -476,8 +476,8 @@ func (m *manager) processRecordset(recordset *aerospike.Recordset, statement *ds
 					aMap = map[string]interface{}(record.Bins)
 				}
 				var columns = m.enrichRecordIfNeeded(statement, aMap)
-				aeroSpikeScanner := newScanner(statement, m.Config(), columns)
-				toContinue, err := m.processRecord(record.Key, record, aeroSpikeScanner, readingHandler)
+				scanner := dsc.NewSQLScanner(statement, m.Config(), columns)
+				toContinue, err := m.processRecord(record.Key, record, scanner, readingHandler)
 				if err != nil {
 					return fmt.Errorf("failed to fetch full scan data on statement %v, due to\n\t%v", statement.SQL, err)
 				}
