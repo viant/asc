@@ -323,6 +323,9 @@ func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.Query
 		var batch = &Batch{}
 		err = iterator.Next(&batch)
 		if err != nil {
+			if strings.Contains(err.Error(), "EOF") {
+				break
+			}
 			return err
 		}
 		err = m.processRecords(batch.Records, batch.Keys, statement, readingHandler)
@@ -381,9 +384,6 @@ func (m *manager) readBatch(client *aerospike.Client, statement *dsc.QueryStatem
 			records, err = client.BatchGet(batchPolicy, keys, statement.ColumnNames()...)
 		}
 		if err != nil {
-			if strings.Contains(err.Error(), "EOF") {
-				continue
-			}
 			return err
 		}
 		break
