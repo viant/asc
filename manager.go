@@ -516,8 +516,8 @@ func (m *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sq
 }
 
 func (m *manager) applyPolicySettings(policy *aerospike.BasePolicy) {
-	policy.MaxRetries = m.Config().GetInt("maxRetries", 2)
-	policy.SleepBetweenRetries = m.Config().GetDuration("sleepBetweenRetriesMs", time.Millisecond, time.Millisecond)
+	policy.MaxRetries = m.Config().GetInt("maxRetries", 3)
+	policy.SleepBetweenRetries = m.Config().GetDuration("sleepBetweenRetriesMs", time.Millisecond, 100)
 	policy.SleepMultiplier = m.Config().GetFloat("sleepMultiplier", 1.2)
 	policy.SocketTimeout = m.Config().GetDuration("socketTimeout", time.Millisecond, 120000)
 }
