@@ -544,7 +544,7 @@ func (m *manager) getBatchPolicy() *aerospike.BatchPolicy {
 	}
 	result := aerospike.NewBatchPolicy()
 	m.applyPolicySettings(&result.BasePolicy)
-	result.ConcurrentNodes = 2
+	result.ConcurrentNodes = m.Config().GetInt("concurrentNodes", 3)
 	m.batchPolicy = result
 	return result
 }
