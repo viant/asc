@@ -31,7 +31,6 @@ const (
 
 type config struct {
 	*dsc.Config
-	readTimeoutMs        int
 	keyColumnName        string
 	generationColumnName string
 	namespace            string
@@ -519,7 +518,8 @@ func (m *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sq
 func (m *manager) applyPolicySettings(policy *aerospike.BasePolicy) {
 	policy.MaxRetries = m.Config().GetInt("maxRetries", 2)
 	policy.SleepBetweenRetries = m.Config().GetDuration("sleepBetweenRetriesMs", time.Millisecond, time.Millisecond)
-	policy.SleepMultiplier = m.Config().GetFloat("sleepMultiplier", 1.0)
+	policy.SleepMultiplier = m.Config().GetFloat("sleepMultiplier", 1.2)
+	policy.SocketTimeout = m.Config().GetDuration("socketTimeout", time.Millisecond, 120000)
 }
 
 func (m *manager) getScanKeyPolicy() *aerospike.ScanPolicy {
@@ -554,10 +554,8 @@ func newConfig(conf *dsc.Config) (*config, error) {
 	if namespace == "" {
 		return nil, fmt.Errorf("namespaceKey was empty")
 	}
-
 	var keyColumnName = conf.GetString(pkColumnNameKey, pkColumnNameDefaultValue)
 	var generationColumnNameValue = conf.GetString(generationColumnNameKey, "")
-	var readTimeoutMs = conf.GetInt(readTimeoutMsKey, 1000*60)
 	var inheritIdFromPK = conf.GetBoolean(inheritIdFromPKKey, true)
 	var excluded []string
 	if conf.Has(excludedColumnsKey) {
@@ -567,7 +565,6 @@ func newConfig(conf *dsc.Config) (*config, error) {
 	return &config{
 		Config:               conf,
 		namespace:            namespace,
-		readTimeoutMs:        readTimeoutMs,
 		keyColumnName:        keyColumnName,
 		excludedColumns:      excluded,
 		generationColumnName: generationColumnNameValue,
