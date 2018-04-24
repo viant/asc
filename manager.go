@@ -515,6 +515,7 @@ func (m *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sq
 	}
 }
 
+
 func (m *manager) applyPolicySettings(policy *aerospike.BasePolicy) {
 	policy.MaxRetries = m.Config().GetInt("maxRetries", 3)
 	policy.SleepBetweenRetries = m.Config().GetDuration("sleepBetweenRetriesMs", time.Millisecond, 100)
@@ -527,6 +528,7 @@ func (m *manager) getScanKeyPolicy() *aerospike.ScanPolicy {
 		return m.scanPolicy
 	}
 	result := aerospike.NewScanPolicy()
+	result.ServerSocketTimeout = m.Config().GetDuration("serverSocketTimeout", time.Millisecond, 30000)
 	result.IncludeBinData = false
 	//Testing only option
 	scanPercentage := m.Config().GetInt("scanPct", 0)
