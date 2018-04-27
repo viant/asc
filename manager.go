@@ -293,11 +293,16 @@ func (m *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStatemen
 	if m.config.GetBoolean(optimizeLargeScanKey, false) {
 		return m.scanAllWithKeys(client, statement, readingHandler, statement.ColumnNames()...)
 	}
+
+	scanPolicy := client.DefaultScanPolicy
+	m.applyPolicySettings(scanPolicy.BasePolicy)
+
 	if statement.AllField {
-		recordset, err = client.ScanAll(client.DefaultScanPolicy, m.config.namespace, statement.Table)
+		recordset, err = client.ScanAll(scanPolicy, m.config.namespace, statement.Table)
 	} else {
-		recordset, err = client.ScanAll(client.DefaultScanPolicy, m.config.namespace, statement.Table, statement.ColumnNames()...)
+		recordset, err = client.ScanAll(scanPolicy, m.config.namespace, statement.Table, statement.ColumnNames()...)
 	}
+
 	if err != nil {
 		return err
 	}
@@ -328,6 +333,7 @@ func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.Query
 			return err
 		}
 		err = m.processRecords(batch.Records, batch.Keys, statement, readingHandler)
+
 		if err != nil {
 			return err
 		}
@@ -505,7 +511,6 @@ func (m *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sq
 	if err != nil {
 		return fmt.Errorf("failed to parse statement %v, %v", sql, err)
 	}
-
 	if statement.Criteria == nil || len(statement.Criteria) == 0 {
 		return m.scanAll(client, statement, readingHandler)
 	} else if len(statement.Criteria) > 1 {
@@ -518,9 +523,9 @@ func (m *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sq
 
 func (m *manager) applyPolicySettings(policy *aerospike.BasePolicy) {
 	policy.MaxRetries = m.Config().GetInt("maxRetries", 3)
-	policy.SleepBetweenRetries = m.Config().GetDuration("sleepBetweenRetriesMs", time.Millisecond, 100)
+	policy.SleepBetweenRetries = m.Config().GetDuration("sleepBetweenRetriesMs", time.Millisecond, 100 * time.Millisecond)
 	policy.SleepMultiplier = m.Config().GetFloat("sleepMultiplier", 1.2)
-	policy.SocketTimeout = m.Config().GetDuration("socketTimeout", time.Millisecond, 120000)
+	policy.SocketTimeout = m.Config().GetDuration("socketTimeout", time.Millisecond, 120000 * time.Millisecond)
 }
 
 func (m *manager) getScanKeyPolicy() *aerospike.ScanPolicy {
@@ -528,7 +533,7 @@ func (m *manager) getScanKeyPolicy() *aerospike.ScanPolicy {
 		return m.scanPolicy
 	}
 	result := aerospike.NewScanPolicy()
-	result.ServerSocketTimeout = m.Config().GetDuration("serverSocketTimeout", time.Millisecond, 30000)
+	result.ServerSocketTimeout = m.Config().GetDuration("serverSocketTimeout", time.Millisecond, 30000 * time.Millisecond)
 	result.IncludeBinData = false
 	//Testing only option
 	scanPercentage := m.Config().GetInt("scanPct", 0)
