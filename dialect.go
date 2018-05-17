@@ -49,13 +49,13 @@ func (d *dialect) SendAdminCommand(manager dsc.Manager, command string) (map[str
 	return aerospike.RequestInfo(connection, command)
 }
 
-func (d *dialect) GetColumns(manager dsc.Manager, datastore, table string) []string {
-	var result = make([]string, 0)
+func (d *dialect) GetColumns(manager dsc.Manager, datastore, table string) ([]dsc.Column, error) {
+	var result = make([]dsc.Column, 0)
 	command := fmt.Sprintf("bins/%v", datastore)
 	response, err := d.SendAdminCommand(manager, command)
 
 	if err != nil {
-		return []string{}
+		return []dsc.Column{}, nil
 	}
 	//
 	if encodedBins, ok := response[command]; ok {
@@ -66,14 +66,15 @@ func (d *dialect) GetColumns(manager dsc.Manager, datastore, table string) []str
 				var binCount = toolbox.AsInt(string(fragment[10:]))
 				if binCount > 0 {
 					for j := 0; j < binCount; j++ {
-						result = append(result, encodedFragments[len(encodedFragments)-(j+1)])
+						var column = dsc.NewSimpleColumn(encodedFragments[len(encodedFragments)-(j+1)], "")
+						result = append(result, column)
 					}
 					break
 				}
 			}
 		}
 	}
-	return result
+	return result, nil
 }
 
 func (d *dialect) DropTable(manager dsc.Manager, datastore string, table string) error {
