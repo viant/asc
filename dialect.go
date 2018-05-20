@@ -124,7 +124,7 @@ func (d *dialect) GetTables(manager dsc.Manager, datastore string) ([]string, er
 }
 
 func (d *dialect) CanPersistBatch() bool {
-	return true
+	return false
 }
 
 func newDialect() dsc.DatastoreDialect {

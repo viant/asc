@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
 	"github.com/aerospike/aerospike-client-go"
 	"github.com/viant/dsc"
 	"github.com/viant/toolbox"
+	"github.com/viant/toolbox/data"
 )
 
 const (
@@ -447,10 +447,11 @@ func (m *manager) processRecords(records []*aerospike.Record, keys []*aerospike.
 
 func (m *manager) enrichRecordIfNeeded(statement *dsc.QueryStatement, record map[string]interface{}) []string {
 	var columns = make([]string, 0)
+	recordMap := data.Map(record)
 	for _, column := range statement.Columns {
 		var name = column.Name
 		if column.Alias != "" {
-			if value, ok := record[name]; ok {
+			if value, ok := recordMap.GetValue(name); ok {
 				delete(record, name)
 				record[column.Alias] = value
 			}
@@ -458,7 +459,6 @@ func (m *manager) enrichRecordIfNeeded(statement *dsc.QueryStatement, record map
 		}
 		columns = append(columns, name)
 	}
-
 	return columns
 }
 
