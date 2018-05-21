@@ -3,14 +3,14 @@ package asc
 import (
 	"database/sql"
 	"fmt"
-	"reflect"
-	"strconv"
-	"strings"
-	"time"
 	"github.com/aerospike/aerospike-client-go"
 	"github.com/viant/dsc"
 	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/data"
+	"reflect"
+	"strconv"
+	"strings"
+	"time"
 )
 
 const (
@@ -305,7 +305,7 @@ func normalizeQueryColumns(columns []*dsc.SQLColumn) []string {
 		var name = column.Name
 		if column.Expression != "" {
 			var expr = column.Expression
-			name = strings.TrimSpace(string(expr[strings.Index(expr, "(")+1:strings.Index(expr, ")")]))
+			name = strings.TrimSpace(string(expr[strings.Index(expr, "(")+1 : strings.Index(expr, ")")]))
 		}
 		index := strings.Index(name, ".")
 		if index != -1 {

@@ -1,7 +1,5 @@
 package asc_test
 
-
-
 //REFACTORING ....
 //
 import (
@@ -12,14 +10,14 @@ import (
 	_ "github.com/aerospike/aerospike-client-go"
 	"github.com/stretchr/testify/assert"
 	_ "github.com/viant/asc"
+	"github.com/viant/assertly"
 	"github.com/viant/dsc"
 	"github.com/viant/dsunit"
 	"github.com/viant/toolbox"
-	"path"
-	"os"
-	"sync/atomic"
 	"log"
-	"github.com/viant/assertly"
+	"os"
+	"path"
+	"sync/atomic"
 )
 
 type User struct {
@@ -43,7 +41,6 @@ func (this User) String() string {
 
 var inited int32
 
-
 func initDb(t *testing.T) bool {
 
 	if !toolbox.FileExists(path.Join(os.Getenv("HOME"), ".secret/bq.json")) {
@@ -59,8 +56,6 @@ func initDb(t *testing.T) bool {
 
 }
 
-
-
 func GetManager(t *testing.T) dsc.Manager {
 
 	config, err := dsc.NewConfigFromURL("test/config.yaml")
@@ -75,9 +70,8 @@ func GetManager(t *testing.T) dsc.Manager {
 	return manager
 }
 
-
 func TestJSONUDF(t *testing.T) {
-	if ! initDb(t) {
+	if !initDb(t) {
 		return
 	}
 	dsunit.PrepareFor(t, "test", "test/", "ReadUDF")
@@ -116,7 +110,7 @@ FROM users WHERE id = ?`, []interface{}{1}, nil)
 
 func TestReadSingle(t *testing.T) {
 
-	if ! initDb(t) {
+	if !initDb(t) {
 		return
 	}
 	dsunit.PrepareFor(t, "test", "test/", "ReadSingle")
@@ -124,7 +118,7 @@ func TestReadSingle(t *testing.T) {
 	manager := GetManager(t)
 	singleUser := User{}
 	success, err := manager.ReadSingle(&singleUser, "SELECT id, username, active, salary, comments,last_time, photo, city_lived, country_lived, city_visited, country_visit FROM users WHERE id = ?", []interface{}{1}, nil)
-	if ! assert.Nil(t, err) {
+	if !assert.Nil(t, err) {
 		return
 	}
 	assert.Equal(t, true, success, "Should fetch a user")
@@ -151,17 +145,14 @@ func TestReadSingle(t *testing.T) {
 
 }
 
-
-
 func TestReadAll(t *testing.T) {
 
-	if ! initDb(t) {
+	if !initDb(t) {
 		return
 	}
 	dsunit.PrepareFor(t, "test", "test/", "ReadAll")
 	manager := GetManager(t)
 	assert.NotNil(t, manager)
-
 
 	{
 		var users = make([]User, 0)
@@ -229,13 +220,12 @@ func TestReadAll(t *testing.T) {
 }
 
 func TestPersistAll(t *testing.T) {
-	if ! initDb(t) {
+	if !initDb(t) {
 		return
 	}
 	dsunit.PrepareFor(t, "test", "test/", "PersistAll")
 	manager := GetManager(t)
 	assert.NotNil(t, manager)
-
 
 	{
 		var users = make([]User, 0)
@@ -269,10 +259,8 @@ func TestPersistAll(t *testing.T) {
 
 }
 
-
-
 func TestDelete(t *testing.T) {
-	if ! initDb(t) {
+	if !initDb(t) {
 		return
 	}
 	dsunit.PrepareFor(t, "test", "test/", "Delete")
@@ -282,8 +270,6 @@ func TestDelete(t *testing.T) {
 	dsunit.ExpectFor(t, "test", dsunit.FullTableDatasetCheckPolicy, "test/", "Delete")
 
 }
-
-
 
 func TestInvalidSql(t *testing.T) {
 	manager := GetManager(t)

@@ -1,18 +1,16 @@
 package asc
 
 import (
-	"testing"
 	"github.com/stretchr/testify/assert"
 	"github.com/viant/assertly"
+	"testing"
 )
-
-
 
 func TestAsArray(t *testing.T) {
 	var source = map[string]interface{}{
-		"k":map[interface{}]interface{} {
-			"a":1,
-			"b":2,
+		"k": map[interface{}]interface{}{
+			"a": 1,
+			"b": 2,
 		},
 	}
 	array, err := AsArray("k", source)
@@ -33,15 +31,12 @@ func TestAsArray(t *testing.T) {
 	assertly.AssertValues(t, expected, array)
 }
 
-
-
-
 func TestAsJSON(t *testing.T) {
 	var source = map[string]interface{}{
-		"k1":[]int{1,2,3},
-		"k2":map[interface{}]interface{} {
-			"a":1,
-			"b":2,
+		"k1": []int{1, 2, 3},
+		"k2": map[interface{}]interface{}{
+			"a": 1,
+			"b": 2,
 		},
 	}
 	{

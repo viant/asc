@@ -1,8 +1,8 @@
 package asc
 
 import (
-	"github.com/viant/toolbox/data"
 	"github.com/viant/toolbox"
+	"github.com/viant/toolbox/data"
 	"strings"
 )
 
@@ -28,7 +28,7 @@ func jsonNormalize(source interface{}) interface{} {
 
 func AsJSON(source interface{}, state data.Map) (interface{}, error) {
 	keyPath := strings.TrimSpace(toolbox.AsString(source))
-	val, ok := state.GetValue(keyPath);
+	val, ok := state.GetValue(keyPath)
 	if ok {
 		val = jsonNormalize(val)
 		return toolbox.AsIndentJSONText(val)
