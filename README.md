@@ -21,12 +21,23 @@ Please refer to [`CHANGELOG.md`](CHANGELOG.md) if you encounter breaking changes
 
 The following is a very simple example of CRUD operations with dsc
 
+config.yaml
+```yaml
+driverName: aerospike
+parameters:
+  namespace: test
+  host: 127.0.0.1
+  dateFormat: yyyy-MM-dd hh:mm:ss
+```
+
 ```go
 package main
 
 import (
     _ "github.com/aerospike/aerospike-client-go"
     _ "github.com/viant/asc"
+    "github.com/viant/dsc"
+    "log"
 )
 
 
@@ -40,37 +51,43 @@ type Interest struct {
 
 func main() {
 
-	config := dsc.NewConfig("aerospike", "", "host:127.0.0.1,port:3000,namespace:test,generationColumnName:generation,dateLayout:2006-01-02 15:04:05.000")
+
+	config, err := dsc.NewConfigFromURL("config.yaml")
+	if err != nil {
+		log.Fatal(err)
+	}
 	factory := dsc.NewManagerFactory()
 	manager, err := factory.Create(config)
-    if err != nil {
-            panic(err.Error())
-    }
+	if err != nil {
+		log.Fatal(err)
+	}
+
+
 
   	// manager := factory.CreateFromURL("file:///etc/myapp/datastore.json")
   
-    interest := Interest{}
+    interest := &Interest{}
     
-    success, err:= manager.ReadSingle(&interest, "SELECT id, name, expiry, category FROM interests WHERE id = ?", []interface{}{id},nil)
+    success, err:= manager.ReadSingle(interest, "SELECT id, name, expiry, category FROM interests WHERE id = ?", []interface{}{id},nil)
 	if err != nil {
         panic(err.Error())
 	}
 
-    var intersts = make([]Interest, 0)
-    err:= manager.ReadAll(&interests, "SELECT id, name, expiry, category FROM interests", nil ,nil)
+    var intersts = make([]*Interest, 0)
+    err = manager.ReadAll(&intersts, "SELECT id, name, expiry, category FROM interests", nil ,nil)
     if err != nil {
         panic(err.Error())
     }
 
     
-    intersts := []Interest {
+    intersts = []*Interest {
         Interest{Name:"Abc", ExpiryTimeInSecond:3600, Category:"xyz"},
         Interest{Name:"Def", ExpiryTimeInSecond:3600, Category:"xyz"},
         Interest{Id:"20, Name:"Ghi", ExpiryTimeInSecond:3600, Category:"xyz"},
     }
 
 
-	inserted, updated, err:= manager.PersistAll(&intersts, "intersts", nil)
+	_, _, err = manager.PersistAll(&intersts, "intersts", nil)
 	if err != nil {
         panic(err.Error())
    	}
@@ -81,8 +98,38 @@ func main() {
         panic(err.Error())
    	}
  	fmt.Printf("Inserted %v, updated: %v\n", deleted)
-  
+
+
+ 	
+ 	var records = []map[string]interface{}{}
+ 	 err = manager.ReadAll(&records, "SELECT id, name, expiry, category FROM interests", nil ,nil)
+    if err != nil {
+        panic(err.Error())
+    }
 }
+```
+
+
+### Query level UDF support
+
+- **ARRAY** converts a map into collection of map entry defined as (key, value) 
+
+```sql
+SELECT 
+  id, 
+  username, 
+ARRAY(city_visited) AS visited
+FROM users
+```
+
+
+- **JSON**  convert supplied source column to JSON
+```sql
+SELECT 
+  id, 
+  username, 
+JSON(city_visited) AS visited
+FROM users
 ```
 
 ## GoCover

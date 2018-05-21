@@ -1,0 +1,45 @@
+[
+  {
+    "id": 1,
+    "username": "Edi",
+    "active": true,
+    "salary": 123.32,
+    "comments": "Test comment",
+    "last_time": "2016-03-01 03:10:00",
+    "photo": "ABC",
+    "city_lived": [
+      "New York",
+      "London"
+    ],
+    "country_lived": [
+      "USA",
+      "UK"
+    ],
+    "city_visited": {
+      "Las Vegas": 1,
+      "Warsaw": 3
+    },
+    "country_visit": {
+      "USA": 1,
+      "Poland": 3
+    }
+  },
+  {
+    "id": 2,
+    "username": "Rudi",
+    "active": true,
+    "salary": 234,
+    "comments": "def",
+    "last_time": "2016-03-01 05:10:00",
+    "photo": "bcd"
+  },
+  {
+    "id": 4,
+    "username": "Vudi",
+    "active": true,
+    "salary": 143,
+    "comments": "xyz",
+    "last_time": "2016-03-01 08:43:00",
+    "photo": "cde"
+  }
+]

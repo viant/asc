@@ -286,12 +286,46 @@ func (m *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sql
 	return dsc.NewSQLResult(1, 0), nil
 }
 
+func normalizeColumnAliases(columns []*dsc.SQLColumn) []string {
+	var result = make([]string, 0)
+	for _, column := range columns {
+		var alias = column.Alias
+		if alias == "" {
+			alias = column.Name
+		}
+		result = append(result, alias)
+	}
+	return result
+}
+
+func normalizeQueryColumns(columns []*dsc.SQLColumn) []string {
+	var result = make([]string, 0)
+	var indexColumns = map[string]bool{}
+	for _, column := range columns {
+		var name = column.Name
+		if column.Expression != "" {
+			var expr = column.Expression
+			name = strings.TrimSpace(string(expr[strings.Index(expr, "(")+1:strings.Index(expr, ")")]))
+		}
+		index := strings.Index(name, ".")
+		if index != -1 {
+			name = string(name[:index])
+		}
+		if _, has := indexColumns[name]; has {
+			continue
+		}
+		indexColumns[name] = true
+		result = append(result, name)
+	}
+	return result
+}
+
 func (m *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	var err error
 	var recordset *aerospike.Recordset
 
 	if m.config.GetBoolean(optimizeLargeScanKey, false) {
-		return m.scanAllWithKeys(client, statement, readingHandler, statement.ColumnNames()...)
+		return m.scanAllWithKeys(client, statement, readingHandler, normalizeQueryColumns(statement.Columns)...)
 	}
 
 	scanPolicy := client.DefaultScanPolicy
@@ -300,7 +334,7 @@ func (m *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStatemen
 	if statement.AllField {
 		recordset, err = client.ScanAll(scanPolicy, m.config.namespace, statement.Table)
 	} else {
-		recordset, err = client.ScanAll(scanPolicy, m.config.namespace, statement.Table, statement.ColumnNames()...)
+		recordset, err = client.ScanAll(scanPolicy, m.config.namespace, statement.Table, normalizeQueryColumns(statement.Columns)...)
 	}
 
 	if err != nil {
@@ -309,7 +343,6 @@ func (m *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStatemen
 	defer recordset.Close()
 	return m.processRecordset(recordset, statement, readingHandler)
 }
-
 
 func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error), binNames ...string) error {
 	scanPolicy := m.getScanKeyPolicy()
@@ -386,7 +419,7 @@ func (m *manager) readBatch(client *aerospike.Client, statement *dsc.QueryStatem
 		if statement.AllField {
 			records, err = client.BatchGet(batchPolicy, keys)
 		} else {
-			records, err = client.BatchGet(batchPolicy, keys, statement.ColumnNames()...)
+			records, err = client.BatchGet(batchPolicy, keys, normalizeQueryColumns(statement.Columns)...)
 		}
 		if err != nil {
 			return err
@@ -420,20 +453,43 @@ func (m *manager) processRecord(key *aerospike.Key, record *aerospike.Record, sc
 	return readingHandler(scanner)
 }
 
+func hasAliasOrExpression(columns []*dsc.SQLColumn) bool {
+	for _, column := range columns {
+		if column.Alias != "" {
+			return true
+		}
+		if column.Expression != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *manager) processRecords(records []*aerospike.Record, keys []*aerospike.Key, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	if len(records) == 0 {
 		return nil
 	}
 
-	for i, record := range records {
-		if record != nil {
-			columns := m.enrichRecordIfNeeded(statement, record.Bins)
+	hasAliasOrExpression := hasAliasOrExpression(statement.Columns)
+	var columns = normalizeColumnAliases(statement.Columns)
+	var err error
+
+	for i, rawRecord := range records {
+
+		if rawRecord != nil {
+			if hasAliasOrExpression {
+				rawRecord.Bins, columns, err = m.normalizeRecord(statement, rawRecord.Bins)
+				if err != nil {
+					return err
+				}
+			}
+
 			scanner := dsc.NewSQLScanner(statement, m.Config(), columns)
 			var key = keys[i]
-			if record.Key != nil {
-				key = record.Key
+			if rawRecord.Key != nil {
+				key = rawRecord.Key
 			}
-			toContinue, err := m.processRecord(key, record, scanner, readingHandler)
+			toContinue, err := m.processRecord(key, rawRecord, scanner, readingHandler)
 			if err != nil {
 				return fmt.Errorf("failed to read data %v, due to\n\t%v", statement.SQL, err)
 			}
@@ -445,44 +501,63 @@ func (m *manager) processRecords(records []*aerospike.Record, keys []*aerospike.
 	return nil
 }
 
-func (m *manager) enrichRecordIfNeeded(statement *dsc.QueryStatement, record map[string]interface{}) []string {
+func (m *manager) registerUDF(record data.Map) {
+	record.Put("JSON", AsJSON)
+	record.Put("ARRAY", AsArray)
+}
+
+func (m *manager) normalizeRecord(statement *dsc.QueryStatement, record map[string]interface{}) (map[string]interface{}, []string, error) {
 	var columns = make([]string, 0)
 	recordMap := data.Map(record)
+	var normalizedRecord = make(map[string]interface{}, len(record))
+	m.registerUDF(recordMap)
 	for _, column := range statement.Columns {
-		var name = column.Name
-		if column.Alias != "" {
-			if value, ok := recordMap.GetValue(name); ok {
-				delete(record, name)
-				record[column.Alias] = value
-			}
-			name = column.Alias
+		var alias = column.Alias
+		if alias == "" {
+			alias = column.Name
 		}
-		columns = append(columns, name)
+		if column.Expression != "" {
+			normalizedRecord[alias] = recordMap.Expand("$" + column.Expression)
+		} else if column.Alias != "" {
+			normalizedRecord[alias], _ = recordMap.GetValue(column.Name)
+		} else {
+			normalizedRecord[alias] = record[column.Name]
+		}
+		columns = append(columns, alias)
 	}
-	return columns
+
+	return normalizedRecord, columns, nil
 }
 
 func (m *manager) processRecordset(recordset *aerospike.Recordset, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	var records = recordset.Records
 	var errors = recordset.Errors
-	var record *aerospike.Record
+	var rawRecord *aerospike.Record
+	hasAliasOrExpression := hasAliasOrExpression(statement.Columns)
+	var columns = normalizeColumnAliases(statement.Columns)
+	var err error
 
 	for {
 		if !recordset.IsActive() {
 			return nil
 		}
 		select {
-		case record = <-records:
-			if record != nil {
+		case rawRecord = <-records:
+			if rawRecord != nil {
 				var aMap map[string]interface{}
-				if len(record.Bins) == 0 {
+				if len(rawRecord.Bins) == 0 {
 					aMap = make(map[string]interface{})
 				} else {
-					aMap = map[string]interface{}(record.Bins)
+					aMap = map[string]interface{}(rawRecord.Bins)
 				}
-				var columns = m.enrichRecordIfNeeded(statement, aMap)
+				if hasAliasOrExpression {
+					rawRecord.Bins, columns, err = m.normalizeRecord(statement, aMap)
+					if err != nil {
+						return err
+					}
+				}
 				scanner := dsc.NewSQLScanner(statement, m.Config(), columns)
-				toContinue, err := m.processRecord(record.Key, record, scanner, readingHandler)
+				toContinue, err := m.processRecord(rawRecord.Key, rawRecord, scanner, readingHandler)
 				if err != nil {
 					return fmt.Errorf("failed to fetch full scan data on statement %v, due to\n\t%v", statement.SQL, err)
 				}
@@ -520,12 +595,11 @@ func (m *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sq
 	}
 }
 
-
 func (m *manager) applyPolicySettings(policy *aerospike.BasePolicy) {
 	policy.MaxRetries = m.Config().GetInt("maxRetries", 3)
-	policy.SleepBetweenRetries = m.Config().GetDuration("sleepBetweenRetriesMs", time.Millisecond, 100 * time.Millisecond)
+	policy.SleepBetweenRetries = m.Config().GetDuration("sleepBetweenRetriesMs", time.Millisecond, 100*time.Millisecond)
 	policy.SleepMultiplier = m.Config().GetFloat("sleepMultiplier", 1.2)
-	policy.SocketTimeout = m.Config().GetDuration("socketTimeout", time.Millisecond, 120000 * time.Millisecond)
+	policy.SocketTimeout = m.Config().GetDuration("socketTimeout", time.Millisecond, 120000*time.Millisecond)
 }
 
 func (m *manager) getScanKeyPolicy() *aerospike.ScanPolicy {
@@ -533,7 +607,7 @@ func (m *manager) getScanKeyPolicy() *aerospike.ScanPolicy {
 		return m.scanPolicy
 	}
 	result := aerospike.NewScanPolicy()
-	result.ServerSocketTimeout = m.Config().GetDuration("serverSocketTimeout", time.Millisecond, 30000 * time.Millisecond)
+	result.ServerSocketTimeout = m.Config().GetDuration("serverSocketTimeout", time.Millisecond, 30000*time.Millisecond)
 	result.IncludeBinData = false
 	//Testing only option
 	scanPercentage := m.Config().GetInt("scanPct", 0)

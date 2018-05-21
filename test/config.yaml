@@ -1,0 +1,5 @@
+driverName: aerospike
+parameters:
+  namespace: test
+  host: 127.0.0.1
+  dateFormat: yyyy-MM-dd hh:mm:ss
