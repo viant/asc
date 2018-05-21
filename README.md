@@ -112,7 +112,7 @@ func main() {
 
 ### Query level UDF support
 
-- **ARRAY** converts a map into collection of map entry defined as (key, value) 
+- **ARRAY** converts supplied source column into collection of map entry defined as (key, value) 
 
 ```sql
 SELECT 
