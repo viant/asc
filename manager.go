@@ -505,7 +505,7 @@ func (m *manager) processRecords(records []*aerospike.Record, keys []*aerospike.
 }
 
 func (m *manager) registerUDF(record data.Map) {
-	record.Put("JSON", AsJSON)
+	record.Put("TO_JSON_STRING", AsJSON)
 	record.Put("ARRAY", AsArray)
 	record.Put("TIMESTAMP", AsTimestamp(m.Config()))
 }
