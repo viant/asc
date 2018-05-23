@@ -84,7 +84,7 @@ id,
 username, 
 country_visit.Poland AS country_visit_count, 
 city_visited.Warsaw AS warsaw_visit_count,
-JSON(city_visited) AS visted_json ,
+TO_JSON_STRING(city_visited) AS visted_json ,
 ARRAY(city_visited) AS visited_array
 FROM users WHERE id = ?`, []interface{}{1}, nil)
 	assert.True(t, success)
