@@ -113,7 +113,7 @@ func (d *dialect) GetTables(manager dsc.Manager, datastore string) ([]string, er
 			if strings.HasPrefix(item, "set_name") {
 				var setName = item[9:]
 				tables = append(tables, setName)
-			} else if strings.HasPrefix(item, "set") {
+			} else if strings.HasPrefix(item, "set=") {
 				var setName = item[4:]
 				tables = append(tables, setName)
 			}
