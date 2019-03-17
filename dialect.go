@@ -17,7 +17,7 @@ type dialect struct{ dsc.DatastoreDialect }
 
 func getConnection(config *dsc.Config) (*aerospike.Connection, error) {
 	if !config.Has(hostKey) || !config.Has(portKey) {
-		return nil, errors.New("Port or hostKey are not poresent")
+		return nil, errors.New("port or hostKey are not present")
 	}
 	hostPort := config.Get(hostKey) + ":" + config.Get(portKey)
 	connectionTimeoutInMs := defaulConnectionTimeout
@@ -127,7 +127,21 @@ func (d *dialect) CanPersistBatch() bool {
 	return false
 }
 
+func (d *dialect) Ping(manager dsc.Manager) error {
+	connection, err := getConnection(manager.Config())
+	if err != nil {
+		return err
+	}
+	if _, err = d.SendAdminCommand(manager, namespaceKey);err != nil {
+		return err
+	}
+	defer connection.Close()
+	if ! connection.IsConnected() {
+		return fmt.Errorf("not connected")
+	}
+	return nil
+}
+
 func newDialect() dsc.DatastoreDialect {
-	var resut dsc.DatastoreDialect = &dialect{dsc.NewDefaultDialect()}
-	return resut
+	return &dialect{dsc.NewDefaultDialect()}
 }
