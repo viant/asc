@@ -19,14 +19,15 @@ func getConnection(config *dsc.Config) (*aerospike.Connection, error) {
 	if !config.Has(hostKey) || !config.Has(portKey) {
 		return nil, errors.New("port or hostKey are not present")
 	}
-	hostPort := config.Get(hostKey) + ":" + config.Get(portKey)
 	connectionTimeoutInMs := defaulConnectionTimeout
-
 	if config.Has(connectionTimeoutMsKey) {
 		timeout := toolbox.AsInt(config.Get(connectionTimeoutMsKey))
 		connectionTimeoutInMs = time.Duration(timeout) * time.Millisecond
 	}
-	return aerospike.NewConnection(hostPort, connectionTimeoutInMs)
+	clientPolicy := aerospike.NewClientPolicy()
+	clientPolicy.Timeout = connectionTimeoutInMs
+	host := aerospike.NewHost(config.Get(hostKey), config.GetInt(portKey, 3000))
+	return aerospike.NewConnection(clientPolicy, host)
 }
 
 //GetKeyName returns a name of column name that is a key, or coma separated list if complex key
@@ -132,11 +133,11 @@ func (d *dialect) Ping(manager dsc.Manager) error {
 	if err != nil {
 		return err
 	}
-	if _, err = d.SendAdminCommand(manager, namespaceKey);err != nil {
+	if _, err = d.SendAdminCommand(manager, namespaceKey); err != nil {
 		return err
 	}
 	defer connection.Close()
-	if ! connection.IsConnected() {
+	if !connection.IsConnected() {
 		return fmt.Errorf("not connected")
 	}
 	return nil

@@ -7,8 +7,8 @@ import (
 
 const (
 	defaultTimeFormat = "yyyy-MM-dd HH:mm:ss z"
-	DateFormatKey       = "dateFormat"
-	DateLayoutKey       = "dateLayout"
+	DateFormatKey     = "dateFormat"
+	DateLayoutKey     = "dateLayout"
 )
 
 type managerFactory struct{}
@@ -18,7 +18,7 @@ func (f *managerFactory) Create(config *dsc.Config) (dsc.Manager, error) {
 		config.Parameters[DateFormatKey] = defaultTimeFormat
 	}
 
-	if ! config.Has(DateLayoutKey) {
+	if !config.Has(DateLayoutKey) {
 		config.Parameters[DateLayoutKey] = toolbox.DateFormatToLayout(config.Get(DateFormatKey))
 	}
 

@@ -332,7 +332,7 @@ func (m *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStatemen
 	}
 
 	scanPolicy := client.DefaultScanPolicy
-	m.applyPolicySettings(scanPolicy.BasePolicy)
+	m.applyPolicySettings(scanPolicy.BasePolicy.GetBasePolicy())
 
 	if statement.AllField {
 		recordset, err = client.ScanAll(scanPolicy, m.config.namespace, statement.Table)
@@ -612,14 +612,14 @@ func (m *manager) getScanKeyPolicy() *aerospike.ScanPolicy {
 		return m.scanPolicy
 	}
 	result := aerospike.NewScanPolicy()
-	result.ServerSocketTimeout = m.Config().GetDuration("serverSocketTimeout", time.Millisecond, 30000*time.Millisecond)
+	result.SocketTimeout = m.Config().GetDuration("serverSocketTimeout", time.Millisecond, 30000*time.Millisecond)
 	result.IncludeBinData = false
 	//Testing only option
 	scanPercentage := m.Config().GetInt("scanPct", 0)
 	if scanPercentage > 0 {
 		result.ScanPercent = scanPercentage
 	}
-	m.applyPolicySettings(result.BasePolicy)
+	m.applyPolicySettings(result.BasePolicy.GetBasePolicy())
 	m.scanPolicy = result
 	return result
 }

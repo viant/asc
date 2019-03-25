@@ -1,10 +1,10 @@
 package asc
 
 import (
+	"github.com/viant/dsc"
 	"github.com/viant/toolbox"
 	"github.com/viant/toolbox/data"
 	"strings"
-	"github.com/viant/dsc"
 )
 
 func jsonNormalize(source interface{}) interface{} {
@@ -55,14 +55,12 @@ func AsArray(source interface{}, state data.Map) (interface{}, error) {
 	return nil, nil
 }
 
-
-
-func AsTimestamp(config *dsc.Config) func(source interface {}, state data.Map) (interface{}, error) {
-	return func(source interface {}, state data.Map) (interface{}, error) {
-			keyPath := strings.TrimSpace(toolbox.AsString(source))
-			if val, ok := state.GetValue(keyPath); ok {
-				return toolbox.ToTime(val, config.Get(DateLayoutKey))
-			}
-			return nil, nil
+func AsTimestamp(config *dsc.Config) func(source interface{}, state data.Map) (interface{}, error) {
+	return func(source interface{}, state data.Map) (interface{}, error) {
+		keyPath := strings.TrimSpace(toolbox.AsString(source))
+		if val, ok := state.GetValue(keyPath); ok {
+			return toolbox.ToTime(val, config.Get(DateLayoutKey))
+		}
+		return nil, nil
 	}
 }
