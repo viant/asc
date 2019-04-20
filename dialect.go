@@ -11,7 +11,7 @@ import (
 	"github.com/viant/toolbox"
 )
 
-var defaulConnectionTimeout = 500 * time.Millisecond
+var defaultConnectionTimeout = 500 * time.Millisecond
 
 type dialect struct{ dsc.DatastoreDialect }
 
@@ -19,7 +19,7 @@ func getConnection(config *dsc.Config) (*aerospike.Connection, error) {
 	if !config.Has(hostKey) || !config.Has(portKey) {
 		return nil, errors.New("port or hostKey are not present")
 	}
-	connectionTimeoutInMs := defaulConnectionTimeout
+	connectionTimeoutInMs := defaultConnectionTimeout
 	if config.Has(connectionTimeoutMsKey) {
 		timeout := toolbox.AsInt(config.Get(connectionTimeoutMsKey))
 		connectionTimeoutInMs = time.Duration(timeout) * time.Millisecond
@@ -32,13 +32,12 @@ func getConnection(config *dsc.Config) (*aerospike.Connection, error) {
 
 //GetKeyName returns a name of column name that is a key, or coma separated list if complex key
 
-func (d *dialect) GetKeyName(manager dsc.Manager, datastore, table string) string {
-	config := manager.Config()
-	var keyName = pkColumnNameDefaultValue
-	if config.Has(pkColumnNameKey) {
-		keyName = config.Get(pkColumnNameKey)
+func (d *dialect) GetKeyName(mgr dsc.Manager, datastore, table string) string {
+	config := mgr.Config()
+	if manager, ok := mgr.(*manager); ok {
+		return manager.config.getKeyColumn(table)
 	}
-	return keyName
+	return config.GetString(pkColumnNameKey, "id")
 }
 
 func (d *dialect) SendAdminCommand(manager dsc.Manager, command string) (map[string]string, error) {

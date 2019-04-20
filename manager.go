@@ -13,31 +13,6 @@ import (
 	"time"
 )
 
-const (
-	pkColumnNameKey          = "keyColumnName"
-	readTimeoutMsKey         = "readTimeoutMs"
-	connectionTimeoutMsKey   = "connectionTimeoutMs"
-	optimizeLargeScanKey     = "optimizeLargeScan"
-	scanBaseDirectoryKey     = "scanBaseDirectory"
-	pkColumnNameDefaultValue = "id"
-	inheritIdFromPKKey       = "inheritIdFromPK"
-	generationColumnNameKey  = "generationColumnName"
-	excludedColumnsKey       = "excludedColumns"
-	batchSizeKey             = "batchSize"
-	namespaceKey             = "namespace"
-	hostKey                  = "host"
-	portKey                  = "port"
-)
-
-type config struct {
-	*dsc.Config
-	keyColumnName        string
-	generationColumnName string
-	namespace            string
-	excludedColumns      []string
-	inheritIdFromPK      bool
-}
-
 type manager struct {
 	*dsc.AbstractManager
 	config      *config
@@ -73,7 +48,7 @@ func convertIfNeeded(source interface{}) interface{} {
 	switch reflectValue.Kind() {
 	case reflect.Map:
 		var newMap = make(map[interface{}]interface{})
-		toolbox.ProcessMap(source, func(key, value interface{}) bool {
+		_ = toolbox.ProcessMap(source, func(key, value interface{}) bool {
 			newMap[convertIfNeeded(key)] = convertIfNeeded(value)
 			return true
 		})
@@ -106,10 +81,9 @@ func convertIfNeeded(source interface{}) interface{} {
 }
 
 func (m *manager) buildUpdateData(statement *dsc.DmlStatement, dmlParameters []interface{}) (key *aerospike.Key, binMap aerospike.BinMap, generation uint32, err error) {
-	keyColumnName := m.config.keyColumnName
+	keyColumn := m.config.getKeyColumn(statement.Table)
 	namespace := m.config.namespace
 	parameters := toolbox.NewSliceIterator(dmlParameters)
-
 	columnValueMap, err := statement.ColumnValueMap(parameters)
 	if err != nil {
 		return nil, nil, 0, fmt.Errorf("failed to prepare update data: [%v] due to %v", dmlParameters, err)
@@ -121,9 +95,8 @@ func (m *manager) buildUpdateData(statement *dsc.DmlStatement, dmlParameters []i
 		}
 		binMap[key] = value
 	}
-
-	if len(statement.Criteria) != 1 || statement.Criteria[0].LeftOperand != keyColumnName {
-		return nil, nil, 0, fmt.Errorf("invalid criteria - expected where clause on %v, but had %v", keyColumnName, statement.Criteria)
+	if len(statement.Criteria) != 1 || statement.Criteria[0].LeftOperand != keyColumn {
+		return nil, nil, 0, fmt.Errorf("invalid criteria - expected where clause on %v, but had %v", keyColumn, statement.Criteria)
 	}
 	keyValues, err := statement.CriteriaValues(parameters)
 	if err != nil {
@@ -134,13 +107,12 @@ func (m *manager) buildUpdateData(statement *dsc.DmlStatement, dmlParameters []i
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	binMap[keyColumnName] = convertIfNeeded(keyValues[0])
+	binMap[keyColumn] = convertIfNeeded(keyValues[0])
 	return key, binMap, generation, err
 }
 
 func (m *manager) buildInsertData(statement *dsc.DmlStatement, dmlParameters []interface{}) (key *aerospike.Key, binMap aerospike.BinMap, err error) {
-
-	keyColumnName := m.config.keyColumnName
+	keyColumn := m.config.getKeyColumn(statement.Table)
 	namespace := m.config.namespace
 	binMap = make(aerospike.BinMap)
 	parameters := toolbox.NewSliceIterator(dmlParameters)
@@ -154,7 +126,7 @@ func (m *manager) buildInsertData(statement *dsc.DmlStatement, dmlParameters []i
 		}
 
 		value := convertIfNeeded(originalValue)
-		if k == keyColumnName {
+		if k == keyColumn {
 			key, err = aerospike.NewKey(namespace, statement.Table, value)
 			if err != nil {
 				return nil, nil, err
@@ -169,12 +141,12 @@ func (m *manager) buildInsertData(statement *dsc.DmlStatement, dmlParameters []i
 }
 
 func (m *manager) deleteAll(client *aerospike.Client, statement *dsc.DmlStatement) (result sql.Result, err error) {
-	recordset, err := client.ScanAll(client.DefaultScanPolicy, m.config.namespace, statement.Table)
+	recordSet, err := client.ScanAll(client.DefaultScanPolicy, m.config.namespace, statement.Table)
 	if err != nil {
 		return nil, err
 	}
 	var i = 0
-	for record := range recordset.Records {
+	for record := range recordSet.Records {
 		writePolicy := aerospike.NewWritePolicy(record.Generation, 0)
 		sucessed, err := client.Delete(writePolicy, record.Key)
 		if err != nil {
@@ -223,7 +195,6 @@ func (m *manager) removedEmptyOrExcluded(binMap aerospike.BinMap) {
 }
 
 func (m *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sqlParameters []interface{}) (result sql.Result, err error) {
-
 	client, err := asClient(connection.Unwrap(clientPointer))
 	if err != nil {
 		return nil, err
@@ -233,7 +204,6 @@ func (m *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sql
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse %v due to %v", sql, err)
 	}
-
 	var key *aerospike.Key
 	var binMap aerospike.BinMap
 	var generation uint32
@@ -243,7 +213,7 @@ func (m *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sql
 
 	switch statement.Type {
 	case "INSERT":
-		if m.config.generationColumnName != "" {
+		if m.config.generationColumn != "" {
 			writingPolicy.GenerationPolicy = aerospike.EXPECT_GEN_EQUAL
 		}
 		key, binMap, err = m.buildInsertData(statement, sqlParameters)
@@ -257,9 +227,7 @@ func (m *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sql
 			err = fmt.Errorf("failed to insert %v %v, %v", key, binMap, err)
 		}
 	case "UPDATE":
-
 		key, binMap, generation, err = m.buildUpdateData(statement, sqlParameters)
-
 		if err == nil {
 			writingPolicy.Generation = generation
 			if generation > 0 {
@@ -326,8 +294,7 @@ func normalizeQueryColumns(columns []*dsc.SQLColumn) []string {
 func (m *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
 	var err error
 	var recordset *aerospike.Recordset
-
-	if m.config.GetBoolean(optimizeLargeScanKey, false) {
+	if m.config.optimizeLargeScan {
 		return m.scanAllWithKeys(client, statement, readingHandler, normalizeQueryColumns(statement.Columns)...)
 	}
 
@@ -344,20 +311,19 @@ func (m *manager) scanAll(client *aerospike.Client, statement *dsc.QueryStatemen
 		return err
 	}
 	defer recordset.Close()
-	return m.processRecordset(recordset, statement, readingHandler)
+	return m.processRecordSet(recordset, statement, readingHandler)
 }
 
 func (m *manager) scanAllWithKeys(client *aerospike.Client, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error), binNames ...string) error {
 	scanPolicy := m.getScanKeyPolicy()
-	baseDirectory := m.config.GetString(scanBaseDirectoryKey, "")
-	keyScanner := NewKeyScanner(client, scanPolicy, baseDirectory, m.config.namespace, statement.Table)
+	keyScanner := NewKeyScanner(client, scanPolicy, m.config.scanBaseDirectory, m.config.namespace, statement.Table)
 	filenames, err := keyScanner.Scan()
 	if err != nil {
 		return err
 	}
 
 	batchPolicy := m.getBatchPolicy()
-	var batchSize = m.config.GetInt(batchSizeKey, 256)
+	var batchSize = m.config.batchSize
 	iterator := NewBatchIterator(client, batchPolicy, batchSize, m.config.namespace, statement.Table, filenames, binNames...)
 	for iterator.HasNext() {
 		var batch = &Batch{}
@@ -381,15 +347,14 @@ func (m *manager) buildKeysForCriteria(statement *dsc.BaseStatement, parameters 
 	var result = make([]*aerospike.Key, 0)
 	criteria := statement.Criteria[0]
 	namespace := m.config.namespace
-	keyColumnName := m.config.keyColumnName
-	if criteria.LeftOperand != keyColumnName {
-		return nil, fmt.Errorf("only criteria on key column: '%v' is supproted: %v", keyColumnName, criteria.LeftOperand)
+	keyColumn := m.config.getKeyColumn(statement.Table)
+	if criteria.LeftOperand != keyColumn {
+		return nil, fmt.Errorf("only criteria on key column: '%v' is supproted: %v", keyColumn, criteria.LeftOperand)
 	}
 	criteriaValues, err := statement.CriteriaValues(parameters)
 	if err != nil {
 		return nil, err
 	}
-
 	for _, criteriaValue := range criteriaValues {
 		criteriaValue = convertIfNeeded(criteriaValue)
 		if criteriaValue == nil {
@@ -413,8 +378,7 @@ func (m *manager) readBatch(client *aerospike.Client, statement *dsc.QueryStatem
 	}
 	var batchPolicy = m.getBatchPolicy()
 	var records []*aerospike.Record
-
-	maxRetries := m.Config().GetInt("maxRetries", 2)
+	maxRetries := m.config.maxRetries
 	if maxRetries == 0 {
 		maxRetries = 1
 	}
@@ -436,17 +400,17 @@ func (m *manager) readBatch(client *aerospike.Client, statement *dsc.QueryStatem
 	return nil
 }
 
-func (m *manager) processRecord(key *aerospike.Key, record *aerospike.Record, scanner *dsc.SQLScanner, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) (toContinue bool, err error) {
-	generationColumnName := m.config.generationColumnName
+func (m *manager) processRecord(table string, key *aerospike.Key, record *aerospike.Record, scanner *dsc.SQLScanner, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) (toContinue bool, err error) {
+	generationColumnName := m.config.generationColumn
 	var bins = record.Bins
 	if generationColumnName != "" {
 		bins[generationColumnName] = record.Generation
 	}
 
 	if m.config.inheritIdFromPK {
-		keyColumnName := m.config.keyColumnName
-		if _, found := bins[keyColumnName]; !found && key != nil && key.Value() != nil {
-			bins[keyColumnName] = key.Value().GetObject()
+		keyColumn := m.config.getKeyColumn(table)
+		if _, found := bins[keyColumn]; !found && key != nil && key.Value() != nil {
+			bins[keyColumn] = key.Value().GetObject()
 		}
 	}
 	scanner.Values = bins
@@ -492,7 +456,7 @@ func (m *manager) processRecords(records []*aerospike.Record, keys []*aerospike.
 			if rawRecord.Key != nil {
 				key = rawRecord.Key
 			}
-			toContinue, err := m.processRecord(key, rawRecord, scanner, readingHandler)
+			toContinue, err := m.processRecord(statement.Table, key, rawRecord, scanner, readingHandler)
 			if err != nil {
 				return fmt.Errorf("failed to read data %v, due to\n\t%v", statement.SQL, err)
 			}
@@ -534,16 +498,16 @@ func (m *manager) normalizeRecord(statement *dsc.QueryStatement, record map[stri
 	return normalizedRecord, columns, nil
 }
 
-func (m *manager) processRecordset(recordset *aerospike.Recordset, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
-	var records = recordset.Records
-	var errors = recordset.Errors
+func (m *manager) processRecordSet(recordSet *aerospike.Recordset, statement *dsc.QueryStatement, readingHandler func(scanner dsc.Scanner) (toContinue bool, err error)) error {
+	var records = recordSet.Records
+	var errors = recordSet.Errors
 	var rawRecord *aerospike.Record
 	hasAliasOrExpression := hasAliasOrExpression(statement.Columns)
 	var columns = normalizeColumnAliases(statement.Columns)
 	var err error
 
 	for {
-		if !recordset.IsActive() {
+		if !recordSet.IsActive() {
 			return nil
 		}
 		select {
@@ -562,7 +526,7 @@ func (m *manager) processRecordset(recordset *aerospike.Recordset, statement *ds
 					}
 				}
 				scanner := dsc.NewSQLScanner(statement, m.Config(), columns)
-				toContinue, err := m.processRecord(rawRecord.Key, rawRecord, scanner, readingHandler)
+				toContinue, err := m.processRecord(statement.Table, rawRecord.Key, rawRecord, scanner, readingHandler)
 				if err != nil {
 					return fmt.Errorf("failed to fetch full scan data on statement %v, due to\n\t%v", statement.SQL, err)
 				}
@@ -585,7 +549,6 @@ func (m *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sq
 	if err != nil {
 		return err
 	}
-
 	parser := dsc.NewQueryParser()
 	statement, err := parser.Parse(sql)
 	if err != nil {
@@ -601,10 +564,9 @@ func (m *manager) ReadAllOnWithHandlerOnConnection(connection dsc.Connection, sq
 }
 
 func (m *manager) applyPolicySettings(policy *aerospike.BasePolicy) {
-	policy.MaxRetries = m.Config().GetInt("maxRetries", 3)
-	policy.SleepBetweenRetries = m.Config().GetDuration("sleepBetweenRetriesMs", time.Millisecond, 100*time.Millisecond)
-	policy.SleepMultiplier = m.Config().GetFloat("sleepMultiplier", 1.2)
-	policy.SocketTimeout = m.Config().GetDuration("socketTimeout", time.Millisecond, 120000*time.Millisecond)
+	policy.MaxRetries = m.config.maxRetries
+	policy.SleepBetweenRetries = m.config.sleepBetweenRetries
+	policy.SocketTimeout = m.config.timeout
 }
 
 func (m *manager) getScanKeyPolicy() *aerospike.ScanPolicy {
@@ -612,12 +574,10 @@ func (m *manager) getScanKeyPolicy() *aerospike.ScanPolicy {
 		return m.scanPolicy
 	}
 	result := aerospike.NewScanPolicy()
-	result.SocketTimeout = m.Config().GetDuration("serverSocketTimeout", time.Millisecond, 30000*time.Millisecond)
+	result.SocketTimeout = m.config.serverSocketTimeout
 	result.IncludeBinData = false
-	//Testing only option
-	scanPercentage := m.Config().GetInt("scanPct", 0)
-	if scanPercentage > 0 {
-		result.ScanPercent = scanPercentage
+	if m.config.scanPct > 0 {
+		result.ScanPercent = m.config.scanPct
 	}
 	m.applyPolicySettings(result.BasePolicy.GetBasePolicy())
 	m.scanPolicy = result
@@ -630,30 +590,6 @@ func (m *manager) getBatchPolicy() *aerospike.BatchPolicy {
 	}
 	result := aerospike.NewBatchPolicy()
 	m.applyPolicySettings(&result.BasePolicy)
-	result.ConcurrentNodes = m.Config().GetInt("concurrentNodes", 3)
 	m.batchPolicy = result
 	return result
-}
-
-func newConfig(conf *dsc.Config) (*config, error) {
-	namespace := conf.Get(namespaceKey)
-	if namespace == "" {
-		return nil, fmt.Errorf("namespaceKey was empty")
-	}
-	var keyColumnName = conf.GetString(pkColumnNameKey, pkColumnNameDefaultValue)
-	var generationColumnNameValue = conf.GetString(generationColumnNameKey, "")
-	var inheritIdFromPK = conf.GetBoolean(inheritIdFromPKKey, true)
-	var excluded []string
-	if conf.Has(excludedColumnsKey) {
-		excluded = strings.Split(conf.Get(excludedColumnsKey), ",")
-	}
-
-	return &config{
-		Config:               conf,
-		namespace:            namespace,
-		keyColumnName:        keyColumnName,
-		excludedColumns:      excluded,
-		generationColumnName: generationColumnNameValue,
-		inheritIdFromPK:      inheritIdFromPK,
-	}, nil
 }

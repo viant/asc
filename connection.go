@@ -41,7 +41,7 @@ type connectionProvider struct {
 
 func (p *connectionProvider) NewConnection() (dsc.Connection, error) {
 	config := p.ConnectionProvider.Config()
-	client, err := aerospike.NewClient(config.Get(hostKey), config.GetInt(portKey, 3000))
+	client, err := aerospike.NewClient(config.GetString(hostKey, "127.0.0.1"), config.GetInt(portKey, 3000))
 	if err != nil {
 		return nil, err
 	}

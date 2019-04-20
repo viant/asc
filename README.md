@@ -4,7 +4,8 @@
 [![Datastore Connectivity library for Aerospike in Go.](https://goreportcard.com/badge/github.com/viant/asc)](https://goreportcard.com/report/github.com/viant/asc)
 [![GoDoc](https://godoc.org/github.com/viant/asc?status.svg)](https://godoc.org/github.com/viant/asc)
 
-This library is compatible with Go 1.5+
+This library is compatible with Go 1.11+
+
 
 Please refer to [`CHANGELOG.md`](CHANGELOG.md) if you encounter breaking changes.
 
@@ -13,7 +14,45 @@ Please refer to [`CHANGELOG.md`](CHANGELOG.md) if you encounter breaking changes
 - [Credits and Acknowledgements](#Credits-and-Acknowledgements)
 
 
+#### Configuration parameters
 
+###### aerospike client/policy config params
+ - timeoutMs
+ - connectionTimeout
+ - serverSocketTimeout
+ - scanPct
+ - host
+ - port
+ - namespace
+ - sleepBetweenRetries
+ - batchSize
+ 
+ 
+###### keyColumn, keyColumnName
+ 
+Defines name of column used as record key ('id' by default)
+
+It can be specified per table i.e
+
+    events.keyColumn = code
+    
+
+###### excludedColumns
+
+List of columns to be excluded from record (i.e: id - in case we need it only as record key)
+
+
+###### dateFormat
+
+ISO date format used to time.Time conversion
+
+
+###### optimizeLargeScan
+
+Experimental feature that first scan all keys and write then to disk
+and then separate go routines scan data using the dumped keys
+
+You can only specify _scanBaseDirectory_
 
 
 ## Usage:
