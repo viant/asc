@@ -194,15 +194,15 @@ func (m *manager) removedEmptyOrExcluded(binMap aerospike.BinMap) {
 	}
 }
 
-func (m *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sqlParameters []interface{}) (result sql.Result, err error) {
+func (m *manager) ExecuteOnConnection(connection dsc.Connection, SQL string, sqlParameters []interface{}) (result sql.Result, err error) {
 	client, err := asClient(connection.Unwrap(clientPointer))
 	if err != nil {
 		return nil, err
 	}
 	parser := dsc.NewDmlParser()
-	statement, err := parser.Parse(sql)
+	statement, err := parser.Parse(SQL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse %v due to %v", sql, err)
+		return nil, fmt.Errorf("failed to parse %v due to %v", SQL, err)
 	}
 	var key *aerospike.Key
 	var binMap aerospike.BinMap
@@ -246,7 +246,13 @@ func (m *manager) ExecuteOnConnection(connection dsc.Connection, sql string, sql
 			return m.deleteAll(client, statement)
 		}
 		return m.deleteSelected(client, statement, sqlParameters)
-
+	default:
+		dsn := fmt.Sprintf("aerospike://%v:%v/%v", m.config.Get(hostKey), m.config.GetInt(portKey, 3000), m.config.namespace)
+		db, err := sql.Open("aerospike", dsn)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open aerospike drive: %s, %w\n", dsn, err)
+		}
+		return db.Exec(SQL, sqlParameters...)
 	}
 	if err != nil {
 		return nil, err
