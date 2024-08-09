@@ -202,6 +202,13 @@ func (m *manager) ExecuteOnConnection(connection dsc.Connection, SQL string, sql
 	parser := dsc.NewDmlParser()
 	statement, err := parser.Parse(SQL)
 	if err != nil {
+		dsn := fmt.Sprintf("aerospike://%v:%v/%v", m.config.Get(hostKey), m.config.GetInt(portKey, 3000), m.config.namespace)
+		if db, err := sql.Open("aerospike", dsn); err == nil {
+			if err != nil {
+				return nil, fmt.Errorf("failed to open aerospike drive: %s, %w\n", dsn, err)
+			}
+			return db.Exec(SQL, sqlParameters...)
+		}
 		return nil, fmt.Errorf("failed to parse %v due to %v", SQL, err)
 	}
 	var key *aerospike.Key
@@ -246,13 +253,6 @@ func (m *manager) ExecuteOnConnection(connection dsc.Connection, SQL string, sql
 			return m.deleteAll(client, statement)
 		}
 		return m.deleteSelected(client, statement, sqlParameters)
-	default:
-		dsn := fmt.Sprintf("aerospike://%v:%v/%v", m.config.Get(hostKey), m.config.GetInt(portKey, 3000), m.config.namespace)
-		db, err := sql.Open("aerospike", dsn)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open aerospike drive: %s, %w\n", dsn, err)
-		}
-		return db.Exec(SQL, sqlParameters...)
 	}
 	if err != nil {
 		return nil, err
