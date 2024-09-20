@@ -43,6 +43,10 @@ func convertIfNeeded(source interface{}) interface{} {
 		return sourceValue.String()
 	case []byte:
 		return sourceValue
+	case []interface{}:
+		return sourceValue
+	case map[interface{}]interface{}:
+		return sourceValue
 	}
 
 	switch reflectValue.Kind() {
